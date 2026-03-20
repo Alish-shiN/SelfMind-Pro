@@ -13,3 +13,4 @@ class User(TimestampMixin, Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
 
     profile = relationship("Profile", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    journal_entries = relationship("JournalEntry", back_populates="user", cascade="all, delete-orphan")
