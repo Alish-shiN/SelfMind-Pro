@@ -4,14 +4,16 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.repo.journal_repository import JournalRepository
 from app.schemas.journal import JournalCreate, JournalUpdate
+from app.services.analysis_service import AnalysisService
 
 
 class JournalService:
     def __init__(self, db: Session):
         self.repo = JournalRepository(db)
+        self.analysis_service = AnalysisService(db)
 
     def create_entry(self, current_user: User, payload: JournalCreate):
-        return self.repo.create(
+        entry = self.repo.create(
             user_id=current_user.id,
             title=payload.title,
             content=payload.content,
@@ -19,6 +21,9 @@ class JournalService:
             tags=payload.tags,
             is_private=payload.is_private,
         )
+
+        self.analysis_service.generate_for_entry(entry.id)
+        return entry
 
     def get_my_entries(self, current_user: User):
         return self.repo.get_all_by_user(current_user.id)
@@ -41,7 +46,9 @@ class JournalService:
             )
 
         update_data = payload.model_dump(exclude_unset=True)
-        return self.repo.update(entry, update_data)
+        updated_entry = self.repo.update(entry, update_data)
+
+        return updated_entry
 
     def delete_entry(self, current_user: User, entry_id: int):
         entry = self.repo.get_by_id_and_user(entry_id, current_user.id)

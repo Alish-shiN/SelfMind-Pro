@@ -37,6 +37,13 @@ class JournalRepository:
             .all()
         )
 
+    def get_by_id(self, entry_id: int) -> JournalEntry | None:
+        return (
+            self.db.query(JournalEntry)
+            .filter(JournalEntry.id == entry_id)
+            .first()
+        )
+
     def get_by_id_and_user(self, entry_id: int, user_id: int) -> JournalEntry | None:
         return (
             self.db.query(JournalEntry)

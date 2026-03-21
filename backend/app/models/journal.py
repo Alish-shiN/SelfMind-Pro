@@ -22,3 +22,9 @@ class JournalEntry(TimestampMixin, Base):
     is_private: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     user = relationship("User", back_populates="journal_entries")
+    analysis = relationship(
+        "JournalAnalysis",
+        back_populates="journal_entry",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
