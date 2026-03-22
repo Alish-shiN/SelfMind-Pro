@@ -35,3 +35,13 @@ class AnalysisRepository:
             .filter(JournalAnalysis.journal_entry_id == journal_entry_id)
             .first()
         )
+
+    def delete(self, analysis: JournalAnalysis) -> None:
+        self.db.delete(analysis)
+        self.db.commit()
+
+    def delete_by_journal_entry_id(self, journal_entry_id: int) -> None:
+        analysis = self.get_by_journal_entry_id(journal_entry_id)
+        if analysis:
+            self.db.delete(analysis)
+            self.db.commit()

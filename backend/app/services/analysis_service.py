@@ -40,6 +40,31 @@ class AnalysisService:
             recommendation=result["recommendation"],
         )
 
+    def regenerate_for_entry(self, current_user: User, entry_id: int):
+        entry = self.journal_repo.get_by_id_and_user(entry_id, current_user.id)
+        if not entry:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Journal entry not found"
+            )
+
+        self.analysis_repo.delete_by_journal_entry_id(entry.id)
+
+        result = self.engine.analyze(
+            title=entry.title,
+            content=entry.content,
+            mood_score=entry.mood_score,
+        )
+
+        return self.analysis_repo.create(
+            journal_entry_id=entry.id,
+            sentiment_label=result["sentiment_label"],
+            emotion_label=result["emotion_label"],
+            confidence_score=result["confidence_score"],
+            short_summary=result["short_summary"],
+            recommendation=result["recommendation"],
+        )
+
     def get_entry_analysis(self, current_user: User, entry_id: int):
         entry = self.journal_repo.get_by_id_and_user(entry_id, current_user.id)
         if not entry:

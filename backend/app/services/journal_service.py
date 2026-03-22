@@ -48,6 +48,8 @@ class JournalService:
         update_data = payload.model_dump(exclude_unset=True)
         updated_entry = self.repo.update(entry, update_data)
 
+        self.analysis_service.regenerate_for_entry(current_user, updated_entry.id)
+
         return updated_entry
 
     def delete_entry(self, current_user: User, entry_id: int):
