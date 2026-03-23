@@ -3,3 +3,7 @@ from app.models.user import User
 from app.models.profile import Profile
 from app.models.journal import JournalEntry
 from app.models.journal_analysis import JournalAnalysis
+from app.models.chat_session import ChatSession
+from app.models.chat_message import ChatMessage
+from app.models.community_post import CommunityPost
+from app.models.community_comment import CommunityComment
