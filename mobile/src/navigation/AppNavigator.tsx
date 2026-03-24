@@ -29,7 +29,7 @@ const navTheme = {
 
 function HomeStackNavigator() {
   return (
-    <HomeStack.Navigator screenOptions={{ headerShown: false }}>
+    <HomeStack.Navigator id="HomeStack" screenOptions={{ headerShown: false }}>
       <HomeStack.Screen name="HomeMain" component={HomeScreen} />
       <HomeStack.Screen name="Feature" component={FeaturePlaceholderScreen} />
     </HomeStack.Navigator>
@@ -39,6 +39,7 @@ function HomeStackNavigator() {
 function MainTabsNavigator() {
   return (
     <Tab.Navigator
+      id="MainTabs"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.text,
@@ -117,7 +118,7 @@ export function AppNavigator() {
 
   return (
     <NavigationContainer theme={navTheme}>
-      <RootStack.Navigator screenOptions={{ headerShown: false }}>
+      <RootStack.Navigator id="RootStack" screenOptions={{ headerShown: false }}>
         {token ? (
           <RootStack.Screen name="MainTabs" component={MainTabsNavigator} />
         ) : !onboardingDone ? (

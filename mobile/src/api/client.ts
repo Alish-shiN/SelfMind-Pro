@@ -1,3 +1,4 @@
+/// <reference lib="es2015" />
 import { API_BASE_URL, API_PREFIX } from '../constants/config';
 import { getToken } from '../lib/storage';
 
@@ -29,7 +30,17 @@ export async function apiFetch<T>(
       h.set('Authorization', `Bearer ${token}`);
     }
   }
-  const res = await fetch(url, { ...rest, headers: h });
+  let res: Response;
+  try {
+    res = await fetch(url, { ...rest, headers: h });
+  } catch (error) {
+    const reason =
+      error instanceof Error ? error.message : 'Network request failed';
+    throw new ApiError(
+      `Cannot reach backend (${url}). ${reason}. Make sure backend is running and reachable from your phone.`,
+      0
+    );
+  }
   const text = await res.text();
   if (!res.ok) {
     let detail = text;
