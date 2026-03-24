@@ -1,3 +1,4 @@
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 /**
@@ -8,8 +9,19 @@ import { Platform } from 'react-native';
  */
 const fromEnv = process.env.EXPO_PUBLIC_API_URL;
 
+function inferHostFromExpo(): string | null {
+  const hostUri =
+    Constants.expoConfig?.hostUri ??
+    (Constants as unknown as { manifest2?: { extra?: { expoGo?: { debuggerHost?: string } } } })
+      .manifest2?.extra?.expoGo?.debuggerHost;
+  if (!hostUri) return null;
+  const host = hostUri.split(':')[0];
+  return host ? `http://${host}:8000` : null;
+}
+
 export const API_BASE_URL =
   fromEnv?.replace(/\/$/, '') ??
+  inferHostFromExpo() ??
   (Platform.OS === 'android' ? 'http://10.0.2.2:8000' : 'http://127.0.0.1:8000');
 
 export const API_PREFIX = '/api/v1';
