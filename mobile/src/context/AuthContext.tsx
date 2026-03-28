@@ -1,5 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { clearToken, getToken, setToken } from '../lib/storage';
+import { ApiError } from '../api/client';
+import { getDashboardHome } from '../api/dashboard';
 
 type AuthContextValue = {
   token: string | null;
@@ -20,8 +22,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const t = await getToken();
       if (!cancelled) {
         setTokenState(t);
-        setReady(true);
       }
+
+      // If a token exists, validate it once at startup.
+      // This prevents rendering the main app when the stored token is expired/invalid.
+      if (t) {
+        try {
+          await getDashboardHome();
+        } catch (e) {
+          if (
+            e instanceof ApiError &&
+            (e.status === 401 || e.status === 403)
+          ) {
+            await clearToken();
+            if (!cancelled) setTokenState(null);
+          }
+        }
+      }
+
+      if (!cancelled) setReady(true);
     })();
     return () => {
       cancelled = true;

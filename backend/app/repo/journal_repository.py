@@ -1,3 +1,5 @@
+from datetime import date as DateType, datetime, time, timezone
+
 from sqlalchemy.orm import Session
 
 from app.models.journal import JournalEntry
@@ -13,14 +15,21 @@ class JournalRepository:
         title: str,
         content: str,
         mood_score: int,
+        entry_date: DateType | None,
         tags: list[str] | None,
         is_private: bool,
     ) -> JournalEntry:
+        created_at: datetime | None = None
+        if entry_date is not None:
+            # Store chosen calendar day as UTC midnight.
+            created_at = datetime.combine(entry_date, time.min, tzinfo=timezone.utc)
+
         entry = JournalEntry(
             user_id=user_id,
             title=title,
             content=content,
             mood_score=mood_score,
+            created_at=created_at,
             tags=tags,
             is_private=is_private,
         )
