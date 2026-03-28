@@ -130,9 +130,9 @@ export function HomeScreen({ navigation }: Props) {
 
             <Pressable
               style={styles.actionBtn}
-              onPress={() => navigation.navigate('Feature', { title: 'Something else' })}
+              onPress={() => navigation.navigate('AiQuiz')}
             >
-              <Text style={styles.actionLabel}>Something else</Text>
+              <Text style={styles.actionLabel}>AI-Quiz</Text>
               <View style={styles.actionIcon}>
                 <Ionicons name="arrow-forward" size={18} color={colors.white} />
               </View>

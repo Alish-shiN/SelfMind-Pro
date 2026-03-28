@@ -18,6 +18,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { ApiError, apiFetch } from '../api/client';
 import { colors } from '../theme/colors';
 import { useAuth } from '../context/AuthContext';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { HomeStackParamList } from '../navigation/types';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type JournalEntry = {
@@ -48,7 +50,9 @@ const getEntries = () =>
 
 const createEntry = (payload: {
   title: string; content: string; mood_score: number;
-  tags: string[]; is_private: boolean;
+  tags: string[];
+  is_private: boolean;
+  entry_date?: string;
 }) =>
   apiFetch<JournalEntry>('/journal/', {
     method: 'POST', auth: true, body: JSON.stringify(payload),
@@ -105,17 +109,33 @@ const mpStyles = StyleSheet.create({
 
 // ─── New Entry Modal ──────────────────────────────────────────────────────────
 function NewEntryModal({
-  visible, onClose, onCreated,
-}: { visible: boolean; onClose: () => void; onCreated: () => void }) {
+  visible,
+  onClose,
+  onCreated,
+  initialEntryDate,
+  initialDiaryType,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+  initialEntryDate?: string;
+  initialDiaryType?: string;
+}) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [moodScore, setMoodScore] = useState(5);
   const [tagsRaw, setTagsRaw] = useState('');
   const [isPrivate, setIsPrivate] = useState(true);
+  const [diaryType, setDiaryType] = useState<string>(initialDiaryType ?? 'journal');
   const [loading, setLoading] = useState(false);
 
   const reset = () => {
-    setTitle(''); setContent(''); setMoodScore(5); setTagsRaw(''); setIsPrivate(true);
+    setTitle('');
+    setContent('');
+    setMoodScore(5);
+    setTagsRaw('');
+    setIsPrivate(true);
+    setDiaryType(initialDiaryType ?? 'journal');
   };
 
   const submit = async () => {
@@ -125,12 +145,17 @@ function NewEntryModal({
     }
     setLoading(true);
     try {
+      const diaryTag = (diaryType || 'journal').toLowerCase();
+      const userTags = tagsRaw.split(',').map((t) => t.trim()).filter(Boolean);
+      const tags = Array.from(new Set([diaryTag, ...userTags]));
+
       await createEntry({
         title: title.trim(),
         content: content.trim(),
         mood_score: moodScore,
-        tags: tagsRaw.split(',').map(t => t.trim()).filter(Boolean),
+        tags,
         is_private: isPrivate,
+        entry_date: initialEntryDate,
       });
       reset();
       onCreated();
@@ -145,7 +170,7 @@ function NewEntryModal({
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <SafeAreaView style={neStyles.safe} edges={['top', 'bottom']}>
           <View style={neStyles.topBar}>
@@ -170,17 +195,56 @@ function NewEntryModal({
               style={neStyles.titleInput}
               placeholder="Entry title…"
               placeholderTextColor={colors.textPlaceholder}
+              selectionColor={colors.coral}
+              cursorColor={colors.text}
               value={title}
               onChangeText={setTitle}
               maxLength={200}
             />
 
+            {initialEntryDate ? (
+              <Text style={neStyles.selectedDate}>
+                Selected date: {initialEntryDate}
+              </Text>
+            ) : null}
+
             <MoodPicker value={moodScore} onChange={setMoodScore} />
+
+            <View style={neStyles.typeWrap}>
+              <Text style={neStyles.typeLabel}>Diary type</Text>
+              <View style={neStyles.typeRow}>
+                {[
+                  { id: 'journal', label: 'Journal' },
+                  { id: 'notion', label: 'Notion' },
+                  { id: 'etc', label: 'Etc' },
+                ].map((t) => (
+                  <Pressable
+                    key={t.id}
+                    style={[
+                      neStyles.typeBtn,
+                      diaryType === t.id && neStyles.typeBtnOn,
+                    ]}
+                    onPress={() => setDiaryType(t.id)}
+                  >
+                    <Text
+                      style={[
+                        neStyles.typeBtnText,
+                        diaryType === t.id && neStyles.typeBtnTextOn,
+                      ]}
+                    >
+                      {t.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
 
             <TextInput
               style={neStyles.contentInput}
               placeholder="Write how you feel today…"
               placeholderTextColor={colors.textPlaceholder}
+              selectionColor={colors.coral}
+              cursorColor={colors.text}
               value={content}
               onChangeText={setContent}
               multiline
@@ -191,6 +255,8 @@ function NewEntryModal({
               style={neStyles.tagsInput}
               placeholder="Tags (comma separated, e.g. work, stress)"
               placeholderTextColor={colors.textPlaceholder}
+              selectionColor={colors.coral}
+              cursorColor={colors.text}
               value={tagsRaw}
               onChangeText={setTagsRaw}
               autoCapitalize="none"
@@ -239,10 +305,40 @@ const neStyles = StyleSheet.create({
     borderBottomWidth: 1.5, borderBottomColor: colors.borderInput,
     paddingBottom: 12, marginBottom: 20,
   },
+  selectedDate: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textMuted,
+    marginBottom: 16,
+  },
   contentInput: {
     fontSize: 15, color: colors.text, minHeight: 160,
     borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 16,
     padding: 14, lineHeight: 22, marginBottom: 16,
+  },
+  typeWrap: { marginBottom: 16 },
+  typeLabel: { fontSize: 13, color: colors.textMuted, marginBottom: 10, fontWeight: '700' },
+  typeRow: { flexDirection: 'row', gap: 10, marginBottom: 4 },
+  typeBtn: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  typeBtnOn: {
+    borderColor: colors.coral,
+    backgroundColor: '#FFF0EE',
+  },
+  typeBtnText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.textMuted,
+  },
+  typeBtnTextOn: {
+    color: colors.coral,
   },
   tagsInput: {
     fontSize: 14, color: colors.text,
@@ -415,8 +511,13 @@ const edStyles = StyleSheet.create({
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 const MOOD_EMOJI_SMALL = ['', '😞', '😟', '😐', '🙂', '😊', '😄', '🌟', '💪', '🚀', '🤩'];
 
-export function AIDiaryScreen() {
+type Props = NativeStackScreenProps<HomeStackParamList, 'AiDiary'>;
+
+export function AIDiaryScreen({ route }: Props) {
   const { signOut } = useAuth();
+  const initialEntryDate = route.params?.entryDate;
+  const initialDiaryType = route.params?.diaryType;
+
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -445,6 +546,11 @@ export function AIDiaryScreen() {
   }, [signOut]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    // If user came from Dashboard "create for this day", open the modal immediately.
+    if (initialEntryDate) setShowNew(true);
+  }, [initialEntryDate]);
 
   const onRefresh = () => { setRefreshing(true); load(); };
 
@@ -537,6 +643,8 @@ export function AIDiaryScreen() {
         visible={showNew}
         onClose={() => setShowNew(false)}
         onCreated={() => { setShowNew(false); load(); }}
+        initialEntryDate={initialEntryDate}
+        initialDiaryType={initialDiaryType}
       />
       {selected && (
         <EntryDetailModal

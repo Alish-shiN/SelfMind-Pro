@@ -102,7 +102,7 @@ function NewPostModal({ visible, onClose, onCreated }: {
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <SafeAreaView style={npStyles.safe} edges={['top', 'bottom']}>
           <View style={npStyles.topBar}>
@@ -136,6 +136,8 @@ function NewPostModal({ visible, onClose, onCreated }: {
               style={npStyles.input}
               placeholder="Share what's on your mind…"
               placeholderTextColor={colors.textPlaceholder}
+              selectionColor={colors.coral}
+              cursorColor={colors.text}
               value={content}
               onChangeText={setContent}
               multiline
@@ -253,7 +255,7 @@ function PostDetailModal({ postId, onClose }: { postId: number; onClose: () => v
     <Modal visible animationType="slide" presentationStyle="pageSheet">
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={0}
       >
         <SafeAreaView style={pdStyles.safe} edges={['top', 'bottom']}>
@@ -340,6 +342,8 @@ function PostDetailModal({ postId, onClose }: { postId: number; onClose: () => v
               style={pdStyles.commentInput}
               placeholder="Write a comment…"
               placeholderTextColor={colors.textPlaceholder}
+              selectionColor={colors.coral}
+              cursorColor={colors.text}
               value={commentText}
               onChangeText={setCommentText}
               multiline

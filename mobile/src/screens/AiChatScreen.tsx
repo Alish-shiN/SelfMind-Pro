@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -105,6 +107,11 @@ export function AiChatScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+      <KeyboardAvoidingView
+        style={styles.kav}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
       <View style={styles.topRow}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
@@ -164,6 +171,8 @@ export function AiChatScreen({ navigation }: Props) {
           style={styles.input}
           placeholder="Write a message…"
           placeholderTextColor={colors.textPlaceholder}
+          selectionColor={colors.coral}
+          cursorColor={colors.text}
           value={text}
           onChangeText={setText}
           multiline
@@ -177,12 +186,14 @@ export function AiChatScreen({ navigation }: Props) {
           <Ionicons name="send" size={18} color="#fff" />
         </Pressable>
       </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.backgroundSoft },
+  kav: { flex: 1 },
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',

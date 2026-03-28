@@ -145,7 +145,7 @@
 //   },
 // });
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, View } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -161,6 +161,7 @@ import { FeaturePlaceholderScreen } from '../screens/FeaturePlaceholderScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { AIDiaryScreen } from '../screens/AiDiaryScreen';
 import { AiChatScreen } from '../screens/AiChatScreen';
+import { AiQuizScreen } from '../screens/AiQuizScreen';
 import { CommunityScreen } from '../screens/CommunityScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { colors } from '../theme/colors';
@@ -183,6 +184,7 @@ function HomeStackNavigator() {
       <HomeStack.Screen name="HomeMain" component={HomeScreen} />
       <HomeStack.Screen name="AiDiary" component={AIDiaryScreen} />
       <HomeStack.Screen name="AiChat" component={AiChatScreen} />
+      <HomeStack.Screen name="AiQuiz" component={AiQuizScreen} />
       <HomeStack.Screen name="Feature" component={FeaturePlaceholderScreen} />
     </HomeStack.Navigator>
   );
@@ -252,7 +254,13 @@ export function AppNavigator() {
   if (!ready || onboardingDone === null) {
     return (
       <View style={styles.boot}>
-        <ActivityIndicator size="large" color={colors.coral} />
+        <Image
+          source={require('../../assets/selfmind-logo.png')}
+          style={styles.bootLogo}
+          resizeMode="contain"
+          accessibilityLabel="SelfMindPro"
+        />
+        <ActivityIndicator size="large" color={colors.coral} style={styles.bootSpinner} />
       </View>
     );
   }
@@ -282,7 +290,17 @@ export function AppNavigator() {
 
 const styles = StyleSheet.create({
   boot: {
-    flex: 1, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.backgroundSoft,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background,
+    paddingHorizontal: 32,
   },
+  bootLogo: {
+    width: '100%',
+    maxWidth: 300,
+    height: 200,
+    marginBottom: 8,
+  },
+  bootSpinner: { marginTop: 16 },
 });

@@ -70,7 +70,10 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
     return { year, monthIndex, cells };
   })();
 
-  const selectedKey = `${selectedDate.getFullYear()}-${selectedDate.getMonth()}-${selectedDate.getDate()}`;
+  const selectedKey = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(
+    selectedDate.getDate()
+  ).padStart(2, '0')}`;
+  const activeDateSet = new Set(data?.active_dates ?? []);
 
   const load = useCallback(async () => {
     setError(null);
@@ -96,6 +99,16 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
   useEffect(() => { load(); }, [load]);
 
   const onRefresh = () => { setRefreshing(true); load(); };
+
+  useEffect(() => {
+    // Refresh calendar after coming back from AiDiary.
+    const sub = navigation?.addListener?.('focus', () => {
+      load();
+    });
+    return () => {
+      sub?.();
+    };
+  }, [navigation, load]);
 
   if (loading && !data) {
     return (
@@ -206,18 +219,27 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
               }
 
               const cellDate = new Date(monthDays.year, monthDays.monthIndex, dayNum);
-              const cellKey = `${cellDate.getFullYear()}-${cellDate.getMonth()}-${cellDate.getDate()}`;
+              // Keys must match backend format: "YYYY-MM-DD"
+              const cellKey = `${cellDate.getFullYear()}-${String(cellDate.getMonth() + 1).padStart(2, '0')}-${String(
+                cellDate.getDate()
+              ).padStart(2, '0')}`;
               const isSelected = cellKey === selectedKey;
+              const isActive = activeDateSet.has(cellKey);
 
               return (
                 <Pressable
                   key={`d-${idx}`}
-                  style={[styles.calCell, isSelected && styles.calCellSelected]}
+                  style={[
+                    styles.calCell,
+                    isSelected && styles.calCellSelected,
+                    isActive && styles.calCellActive,
+                  ]}
                   onPress={() => setSelectedDate(cellDate)}
                 >
                   <Text style={[styles.calDayText, isSelected && styles.calDayTextSelected]}>
                     {dayNum}
                   </Text>
+                  {isActive ? <View style={styles.calDot} /> : null}
                 </Pressable>
               );
             })}
@@ -263,11 +285,16 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
           <Pressable
             style={styles.calActionBtn}
             onPress={() => {
-              const label = actionMode === 'note' ? 'note' : 'notifier';
-              Alert.alert(
-                'Saved (demo)',
-                `You picked a ${label} day: ${selectedDate.toLocaleDateString('en-US')}`
-              );
+              const entryDate = `${selectedDate.getFullYear()}-${String(
+                selectedDate.getMonth() + 1
+              ).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+              const diaryType = actionMode === 'note' ? 'journal' : 'etc';
+
+              // Navigate into HomeStack (AiDiary) from the nested tab navigator.
+              navigation.navigate('Home', {
+                screen: 'AiDiary',
+                params: { entryDate, diaryType },
+              });
             }}
           >
             <Text style={styles.calActionText}>
@@ -457,8 +484,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
     marginBottom: 6,
+    position: 'relative',
   },
   calCellSelected: {
+    backgroundColor: colors.coral,
+  },
+  calCellActive: {
+    backgroundColor: '#E9F0FF',
+    borderWidth: 1,
+    borderColor: '#93C5FD',
+  },
+  calDot: {
+    position: 'absolute',
+    bottom: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: colors.coral,
   },
   calDayText: { fontSize: 12, color: colors.textMuted, fontWeight: '700' },

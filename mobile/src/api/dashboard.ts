@@ -8,6 +8,7 @@ export type DashboardHome = {
     current_streak: number;
     longest_streak: number;
   };
+  active_dates: string[];
   recent_entries: Array<{
     id: number;
     title: string;

@@ -15,8 +15,11 @@ export function PillInput({ label, icon, style, ...rest }: Props) {
         <View style={styles.iconSlot}>{icon}</View>
         <TextInput
           placeholderTextColor={colors.textPlaceholder}
-          style={[styles.input, style]}
+          selectionColor={colors.coral}
+          cursorColor={colors.text}
+          underlineColorAndroid="transparent"
           {...rest}
+          style={[styles.input, style]}
         />
       </View>
     </View>
