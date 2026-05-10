@@ -1,4 +1,6 @@
+
 from functools import lru_cache
+from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +24,11 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
+    OPENAI_API_KEY: str
+    OPENAI_MODEL: str = "gpt-5-mini"
+    BACKEND_CORS_ORIGINS: List[str] = ["*"]
+
+
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         return (
@@ -35,4 +42,5 @@ def get_settings() -> Settings:
     return Settings()
 
 
+settings = get_settings()
 settings = get_settings()
