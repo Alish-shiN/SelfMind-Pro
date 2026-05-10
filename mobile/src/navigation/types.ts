@@ -5,10 +5,14 @@ export type RootStackParamList = {
   Welcome: undefined;
   Register: undefined;
   MainTabs: undefined;
+  Profile: undefined;
 };
 
 export type HomeStackParamList = {
   HomeMain: undefined;
+  AiDiary: { entryDate?: string; diaryType?: string } | undefined;
+  AiChat: undefined;
+  AiQuiz: undefined;
   Feature: { title: string };
 };
 

@@ -18,6 +18,7 @@ class JournalService:
             title=payload.title,
             content=payload.content,
             mood_score=payload.mood_score,
+            entry_date=payload.entry_date,
             tags=payload.tags,
             is_private=payload.is_private,
         )

@@ -17,3 +17,4 @@ class User(TimestampMixin, Base):
     chat_sessions = relationship("ChatSession", back_populates="user", cascade="all, delete-orphan")
     community_posts = relationship("CommunityPost", back_populates="user", cascade="all, delete-orphan")
     community_comments = relationship("CommunityComment", back_populates="user", cascade="all, delete-orphan")
+    ai_quiz_sessions = relationship("AIQuizSession", back_populates="user", cascade="all, delete-orphan")

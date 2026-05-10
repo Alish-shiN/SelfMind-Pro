@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
@@ -7,6 +7,9 @@ class JournalBase(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=1)
     mood_score: int = Field(ge=1, le=10)
+    # Allows client to set which day the entry belongs to (used by calendar).
+    # Expected format: "YYYY-MM-DD"
+    entry_date: date | None = None
     tags: list[str] | None = []
     is_private: bool = True
 

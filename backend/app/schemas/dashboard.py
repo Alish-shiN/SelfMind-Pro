@@ -1,4 +1,5 @@
 from datetime import datetime
+from datetime import date as DateType
 
 from pydantic import BaseModel, EmailStr
 
@@ -42,3 +43,5 @@ class DashboardHomeResponse(BaseModel):
     stats: DashboardStats
     recent_entries: list[DashboardRecentEntry]
     latest_analysis: DashboardLatestAnalysis | None = None
+    # Dates (YYYY-MM-DD) where the user has at least one journal entry.
+    active_dates: list[DateType] = []

@@ -36,13 +36,21 @@ export function HomeScreen({ navigation }: Props) {
       const d = await getDashboardHome();
       setData(d);
     } catch (e) {
+      if (
+        e instanceof ApiError &&
+        (e.status === 401 || e.status === 403)
+      ) {
+        await signOut();
+        setError(null);
+        return;
+      }
       const msg = e instanceof ApiError ? e.message : 'Could not load dashboard.';
       setError(msg);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [signOut]);
 
   useEffect(() => {
     load();
@@ -102,7 +110,7 @@ export function HomeScreen({ navigation }: Props) {
 
             <Pressable
               style={styles.actionBtn}
-              onPress={() => navigation.navigate('Feature', { title: 'AI-Diary' })}
+              onPress={() => navigation.navigate('AiDiary')}
             >
               <Text style={styles.actionLabel}>AI-Diary</Text>
               <View style={styles.actionIcon}>
@@ -112,7 +120,7 @@ export function HomeScreen({ navigation }: Props) {
 
             <Pressable
               style={styles.actionBtn}
-              onPress={() => navigation.navigate('Feature', { title: 'AI-Chat' })}
+              onPress={() => navigation.navigate('AiChat')}
             >
               <Text style={styles.actionLabel}>AI-Chat</Text>
               <View style={styles.actionIcon}>
@@ -122,9 +130,9 @@ export function HomeScreen({ navigation }: Props) {
 
             <Pressable
               style={styles.actionBtn}
-              onPress={() => navigation.navigate('Feature', { title: 'Something else' })}
+              onPress={() => navigation.navigate('AiQuiz')}
             >
-              <Text style={styles.actionLabel}>Something else</Text>
+              <Text style={styles.actionLabel}>AI-Quiz</Text>
               <View style={styles.actionIcon}>
                 <Ionicons name="arrow-forward" size={18} color={colors.white} />
               </View>

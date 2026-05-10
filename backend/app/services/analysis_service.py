@@ -4,14 +4,13 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.repo.analysis_repository import AnalysisRepository
 from app.repo.journal_repository import JournalRepository
-from app.services.analyzer_engine import AnalyzerEngine
-
+from app.services.ai_analysis_engine import AIAnalysisEngine
 
 class AnalysisService:
     def __init__(self, db: Session):
         self.analysis_repo = AnalysisRepository(db)
         self.journal_repo = JournalRepository(db)
-        self.engine = AnalyzerEngine()
+        self.engine = AIAnalysisEngine()
 
     def generate_for_entry(self, entry_id: int):
         entry = self.journal_repo.get_by_id(entry_id)

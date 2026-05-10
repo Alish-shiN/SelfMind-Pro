@@ -42,4 +42,5 @@ class DashboardService:
             },
             "recent_entries": recent_entries,
             "latest_analysis": latest_analysis_payload,
+            "active_dates": [d.isoformat() for d in active_dates],
         }

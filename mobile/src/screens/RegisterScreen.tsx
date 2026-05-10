@@ -2,9 +2,14 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -52,53 +57,66 @@ export function RegisterScreen({ navigation }: RegisterScreenProps) {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <DecorBlobs variant="welcome" />
-      <View style={styles.inner}>
-        <Pressable style={styles.back} onPress={() => navigation.goBack()}>
-          <Ionicons name="chevron-back" size={24} color={colors.text} />
-          <Text style={styles.backText}>Back</Text>
-        </Pressable>
+      <KeyboardAvoidingView
+        style={styles.kav}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.inner}>
+              <Pressable style={styles.back} onPress={() => navigation.goBack()}>
+                <Ionicons name="chevron-back" size={24} color={colors.text} />
+                <Text style={styles.backText}>Back</Text>
+              </Pressable>
 
-        <Text style={styles.title}>Create account</Text>
-        <Text style={styles.sub}>Join SelfMind Pro in a few steps.</Text>
+              <Text style={styles.title}>Create account</Text>
+              <Text style={styles.sub}>Join SelfMind Pro in a few steps.</Text>
 
-        <PillInput
-          label="Email"
-          icon={<Ionicons name="mail-outline" size={20} color={colors.text} />}
-          placeholder="you@example.com"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
-        <PillInput
-          label="Username"
-          icon={<Ionicons name="at-outline" size={20} color={colors.text} />}
-          placeholder="choose a username"
-          autoCapitalize="none"
-          value={username}
-          onChangeText={setUsername}
-        />
-        <PillInput
-          label="Password"
-          icon={<Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} />}
-          placeholder="at least 8 characters"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
+              <PillInput
+                label="Email"
+                icon={<Ionicons name="mail-outline" size={20} color={colors.text} />}
+                placeholder="you@example.com"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+              />
+              <PillInput
+                label="Username"
+                icon={<Ionicons name="at-outline" size={20} color={colors.text} />}
+                placeholder="choose a username"
+                autoCapitalize="none"
+                value={username}
+                onChangeText={setUsername}
+              />
+              <PillInput
+                label="Password"
+                icon={<Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} />}
+                placeholder="at least 8 characters"
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+              />
 
-        <Pressable
-          style={[styles.primaryBtn, loading && styles.btnDisabled]}
-          onPress={onSubmit}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color={colors.white} />
-          ) : (
-            <Text style={styles.primaryBtnText}>Create Account</Text>
-          )}
-        </Pressable>
-      </View>
+              <Pressable
+                style={[styles.primaryBtn, loading && styles.btnDisabled]}
+                onPress={onSubmit}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.white} />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Create Account</Text>
+                )}
+              </Pressable>
+            </View>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -108,8 +126,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  kav: { flex: 1 },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 32,
+  },
   inner: {
-    flex: 1,
     paddingHorizontal: 28,
     paddingTop: 4,
   },

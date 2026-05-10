@@ -2,9 +2,14 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -43,72 +48,86 @@ export function WelcomeScreen({ navigation }: WelcomeScreenProps) {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <DecorBlobs variant="welcome" />
-      <View style={styles.inner}>
-        <Text style={styles.welcome}>Welcome!</Text>
+      <KeyboardAvoidingView
+        style={styles.kav}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.inner}>
+              <Text style={styles.welcome}>Welcome!</Text>
 
-        <View style={styles.hero}>
-          <Text style={styles.heroEmoji} accessibilityLabel="Illustration">
-            🧠🌸
-          </Text>
-          <Text style={styles.heroCaption}>Mindful self-care</Text>
-        </View>
+              <View style={styles.hero}>
+                <Text style={styles.heroEmoji} accessibilityLabel="Illustration">
+                  🧠🌸
+                </Text>
+                <Text style={styles.heroCaption}>Mindful self-care</Text>
+              </View>
 
-        <PillInput
-          label="Email"
-          icon={<Ionicons name="person-outline" size={20} color={colors.text} />}
-          placeholder="enter your email here"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
+              <PillInput
+                label="Email"
+                icon={<Ionicons name="person-outline" size={20} color={colors.text} />}
+                placeholder="enter your email here"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+              />
 
-        <PillInput
-          label="Password"
-          icon={<Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} />}
-          placeholder="••••••••"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
+              <PillInput
+                label="Password"
+                icon={<Ionicons name="lock-closed-outline" size={20} color={colors.textMuted} />}
+                placeholder="••••••••"
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+              />
 
-        <Pressable style={styles.forgotWrap} onPress={() => Alert.alert('Forgot password', 'Contact support or reset via web when available.')}>
-          <Text style={styles.forgot}>Forgot Password?</Text>
-        </Pressable>
+              <Pressable style={styles.forgotWrap} onPress={() => Alert.alert('Forgot password', 'Contact support or reset via web when available.')}>
+                <Text style={styles.forgot}>Forgot Password?</Text>
+              </Pressable>
 
-        <Text style={styles.orConnect}>Or Connect With</Text>
-        <Pressable
-          style={styles.googleRow}
-          onPress={() => Alert.alert('Google sign-in', 'Wire this to your OAuth flow when ready.')}
-        >
-          <Text style={styles.googleG}>G</Text>
-        </Pressable>
+              <Text style={styles.orConnect}>Or Connect With</Text>
+              <Pressable
+                style={styles.googleRow}
+                onPress={() => Alert.alert('Google sign-in', 'Wire this to your OAuth flow when ready.')}
+              >
+                <Text style={styles.googleG}>G</Text>
+              </Pressable>
 
-        <Pressable
-          style={[styles.primaryBtn, loading && styles.btnDisabled]}
-          onPress={onSignIn}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color={colors.white} />
-          ) : (
-            <Text style={styles.primaryBtnText}>Sign in</Text>
-          )}
-        </Pressable>
+              <Pressable
+                style={[styles.primaryBtn, loading && styles.btnDisabled]}
+                onPress={onSignIn}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color={colors.white} />
+                ) : (
+                  <Text style={styles.primaryBtnText}>Sign in</Text>
+                )}
+              </Pressable>
 
-        <View style={styles.separatorRow}>
-          <View style={styles.sepLine} />
-          <Text style={styles.sepOr}>or</Text>
-          <View style={styles.sepLine} />
-        </View>
+              <View style={styles.separatorRow}>
+                <View style={styles.sepLine} />
+                <Text style={styles.sepOr}>or</Text>
+                <View style={styles.sepLine} />
+              </View>
 
-        <Pressable
-          style={styles.primaryBtn}
-          onPress={() => navigation.navigate('Register')}
-        >
-          <Text style={styles.primaryBtnText}>Create Account</Text>
-        </Pressable>
-      </View>
+              <Pressable
+                style={styles.primaryBtn}
+                onPress={() => navigation.navigate('Register')}
+              >
+                <Text style={styles.primaryBtnText}>Create Account</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -118,8 +137,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  kav: { flex: 1 },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 32,
+  },
   inner: {
-    flex: 1,
     paddingHorizontal: 28,
     paddingTop: 8,
   },

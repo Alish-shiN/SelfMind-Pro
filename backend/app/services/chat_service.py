@@ -6,16 +6,15 @@ from app.repo.analytics_repository import AnalyticsRepository
 from app.repo.chat_repository import ChatRepository
 from app.repo.dashboard_repository import DashboardRepository
 from app.schemas.chat import ChatMessageCreate, ChatSessionCreate
-from app.services.chat_engine import ChatEngine
-
+from app.services.ai_chat_engine import AIChatEngine
 
 class ChatService:
     def __init__(self, db: Session):
         self.chat_repo = ChatRepository(db)
         self.analytics_repo = AnalyticsRepository(db)
         self.dashboard_repo = DashboardRepository(db)
-        self.engine = ChatEngine()
-
+        self.engine = AIChatEngine()
+        
     def create_session(self, current_user: User, payload: ChatSessionCreate):
         return self.chat_repo.create_session(
             user_id=current_user.id,
