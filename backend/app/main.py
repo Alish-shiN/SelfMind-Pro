@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -10,6 +11,10 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
     allow_credentials=True,
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    # CORS spec forbids wildcard origins when credentials are enabled.
+    # Keep credentials enabled only for explicit origin lists.
+    allow_credentials="*" not in settings.BACKEND_CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
