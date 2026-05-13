@@ -1,4 +1,4 @@
-
+/// <reference lib="es2015" />
 import { API_BASE_URL, API_PREFIX } from '../constants/config';
 import { getToken } from '../lib/storage';
 
@@ -66,11 +66,9 @@ export async function apiFetch<T>(
     let detail = text;
     try {
       const j = JSON.parse(text) as { detail?: unknown };
-      if (typeof j.detail === 'string') detail = j.detail;
-      else if (Array.isArray(j.detail)) detail = j.detail.map(String).join(', ');
       detail = formatDetail(j.detail) || detail;
     } catch {
-      /* something */
+      /* keep text */
     }
     throw new ApiError(detail || res.statusText, res.status, text);
   }
