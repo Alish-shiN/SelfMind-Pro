@@ -12,6 +12,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { ApiError } from "../api/client";
+import { getDashboardHome } from "../api/dashboard";
+import { getAiQuizHistory } from "../api/aiQuiz";
 import {
   completeGoal,
   createGoal,
@@ -25,28 +27,135 @@ import {
   WeeklyGoalSummary,
 } from "../api/goals";
 import { colors } from "../theme/colors";
+import { useTranslation } from "../i18n/I18nContext";
+import {
+  getAchievementPrivacyReady,
+  getAchievementWeeklyMoodReview,
+  getAchievementWeeklySummaryCompleted,
+  getTrustedPersonPhone,
+  setAchievementWeeklySummaryCompleted,
+} from "../lib/storage";
+import {
+  Achievement,
+  AchievementCategory,
+  ACHIEVEMENT_CATEGORIES,
+  buildAchievements,
+} from "../utils/achievements";
 
-const starterGoals = [
+const starterGoalTemplates = [
   {
-    title: "Reflect 3 times",
-    description: "Write three journal entries this week.",
+    titleKey: "reflect3Times",
+    descriptionKey: "reflect3TimesDesc",
     goal_type: "reflection" as const,
     target_count: 3,
     period: "weekly" as const,
   },
   {
-    title: "Track mood 5 times",
-    description: "Log mood with your journal entries five times this week.",
+    titleKey: "trackMood5Times",
+    descriptionKey: "trackMood5TimesDesc",
     goal_type: "mood_tracking" as const,
     target_count: 5,
     period: "weekly" as const,
   },
 ];
 
+function achievementCategoryLabel(
+  category: AchievementCategory,
+  t: (key: string) => string,
+) {
+  const labels: Record<AchievementCategory, string> = {
+    reflection: t("achievementCategoryReflection"),
+    mood: t("achievementCategoryMood"),
+    ai_support: t("achievementCategoryAiSupport"),
+    self_care: t("achievementCategorySelfCare"),
+  };
+  return labels[category];
+}
+
+function AchievementCard({ achievement }: { achievement: Achievement }) {
+  const { t } = useTranslation();
+  const isCompleted = achievement.status === "unlocked";
+  const isInProgress = achievement.status === "in_progress";
+  const statusText = isCompleted
+    ? t("achievementStatusCompleted")
+    : isInProgress
+      ? t("achievementStatusInProgress")
+      : t("achievementStatusNotYet");
+  const encouragement = isCompleted
+    ? t("achievementEncouragementShowedUp")
+    : isInProgress
+      ? t("achievementEncouragementAwareness")
+      : t("achievementEncouragementSmallSteps");
+  const progressText =
+    achievement.target && achievement.progress != null
+      ? `${Math.min(achievement.progress, achievement.target)}/${achievement.target}`
+      : null;
+
+  return (
+    <View
+      style={[
+        styles.achievementCard,
+        isCompleted && styles.achievementCardCompleted,
+      ]}
+    >
+      <View style={styles.achievementTopRow}>
+        <View
+          style={[
+            styles.achievementIconWrap,
+            isCompleted && styles.achievementIconCompleted,
+          ]}
+        >
+          <Ionicons
+            name={achievement.icon as keyof typeof Ionicons.glyphMap}
+            size={20}
+            color={isCompleted ? colors.coral : colors.textMuted}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.achievementTitle}>{achievement.title}</Text>
+          <Text style={styles.achievementDescription}>
+            {achievement.description}
+          </Text>
+        </View>
+        <Text
+          style={[
+            styles.achievementStatus,
+            isCompleted && styles.achievementStatusCompleted,
+            isInProgress && styles.achievementStatusProgress,
+          ]}
+        >
+          {statusText}
+        </Text>
+      </View>
+      {progressText ? (
+        <View style={styles.achievementProgressRow}>
+          <View style={styles.achievementProgressTrack}>
+            <View
+              style={[
+                styles.achievementProgressFill,
+                {
+                  width: `${Math.min(
+                    ((achievement.progress ?? 0) / achievement.target) * 100,
+                    100,
+                  )}%`,
+                },
+              ]}
+            />
+          </View>
+          <Text style={styles.achievementProgressText}>{progressText}</Text>
+        </View>
+      ) : null}
+      <Text style={styles.achievementEncouragement}>{encouragement}</Text>
+    </View>
+  );
+}
+
 export function GoalsScreen() {
+  const { t } = useTranslation();
   const [progress, setProgress] = useState<GoalProgress[]>([]);
   const [summary, setSummary] = useState<WeeklyGoalSummary | null>(null);
   const [templates, setTemplates] = useState<GoalTemplate[]>([]);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -55,21 +164,69 @@ export function GoalsScreen() {
   const load = useCallback(async () => {
     try {
       setError(null);
-      const [p, s, t] = await Promise.all([
+      const [
+        p,
+        s,
+        templatesData,
+        dashboard,
+        quizHistory,
+        trustedPhone,
+        privacyReady,
+        weeklyMoodReview,
+        weeklySummaryCompleted,
+      ] = await Promise.all([
         getGoalProgress(),
         getWeeklyGoalSummary(),
         getGoalTemplates(),
+        getDashboardHome().catch(() => null),
+        getAiQuizHistory(1).catch(() => []),
+        getTrustedPersonPhone(),
+        getAchievementPrivacyReady(),
+        getAchievementWeeklyMoodReview(),
+        getAchievementWeeklySummaryCompleted(),
       ]);
+      if (s) {
+        void setAchievementWeeklySummaryCompleted();
+      }
       setProgress(p);
       setSummary(s);
-      setTemplates(t);
+      setTemplates(templatesData);
+      const reflectionProgress = p.find(
+        (item) => item.goal.goal_type === "reflection",
+      );
+      const moodProgress = p.find(
+        (item) => item.goal.goal_type === "mood_tracking",
+      );
+      const journalEntryCount =
+        dashboard?.stats.total_entries ??
+        reflectionProgress?.current_count ??
+        0;
+      const moodEntryCount =
+        dashboard?.stats.total_entries ?? moodProgress?.current_count ?? 0;
+      setAchievements(
+        buildAchievements(
+          {
+            journalEntryCount,
+            journalEntryDates: dashboard?.active_dates ?? [],
+            moodEntryCount,
+            aiInsightCount: dashboard?.latest_analysis ? 1 : 0,
+            quizResultCount:
+              quizHistory.length || dashboard?.latest_quiz_action_plan ? 1 : 0,
+            trustedPersonPhone: trustedPhone,
+            weeklyMoodReviewViewed: weeklyMoodReview,
+            weeklySummaryViewed: weeklySummaryCompleted || Boolean(s),
+            privacyConfigured: privacyReady,
+          },
+          t,
+        ),
+      );
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not load goals.");
+      setError(e instanceof ApiError ? e.message : t("couldNotLoadGoals"));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -80,11 +237,11 @@ export function GoalsScreen() {
     try {
       await action();
       await load();
-      Alert.alert("Goals", success);
+      Alert.alert(t("goalsTitle"), success);
     } catch (e) {
       Alert.alert(
-        "Goal error",
-        e instanceof ApiError ? e.message : "Could not update goals.",
+        t("goalError"),
+        e instanceof ApiError ? e.message : t("couldNotUpdateGoals"),
       );
     } finally {
       setSaving(false);
@@ -102,20 +259,20 @@ export function GoalsScreen() {
           period: template.period,
           template_key: template.key,
         }),
-      "Goal added.",
+      t("goalAdded"),
     );
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.kicker}>Self-improvement</Text>
-          <Text style={styles.title}>Goals</Text>
+          <Text style={styles.kicker}>{t("selfImprovement")}</Text>
+          <Text style={styles.title}>{t("goalsTitle")}</Text>
         </View>
         {saving ? (
           <ActivityIndicator color={colors.coral} />
         ) : (
-          <Ionicons name="flag-outline" size={24} color={colors.coral} />
+          <Ionicons name="sparkles-outline" size={24} color={colors.coral} />
         )}
       </View>
 
@@ -139,29 +296,58 @@ export function GoalsScreen() {
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           <View style={styles.summaryCard}>
-            <Text style={styles.sectionTitle}>Weekly summary</Text>
+            <Text style={styles.sectionTitle}>{t("weeklySummary")}</Text>
             <Text style={styles.percent}>
               {summary?.overall_completion_percentage ?? 0}%
             </Text>
             <Text style={styles.message}>
-              {summary?.supportive_message ?? "Choose one small goal to begin."}
+              {summary?.supportive_message ?? t("chooseSmallGoal")}
             </Text>
             <Text style={styles.meta}>
-              Completed {summary?.completed_goals ?? 0} • Partial{" "}
-              {summary?.partially_completed_goals ?? 0} • Missed{" "}
+              {t("completed")} {summary?.completed_goals ?? 0} • {t("partial")}{" "}
+              {summary?.partially_completed_goals ?? 0} • {t("achievementStatusNotYet")}{" "}
               {summary?.missed_goals ?? 0}
             </Text>
           </View>
 
-          <Text style={styles.sectionTitle}>Active goals</Text>
+          <View style={styles.achievementsSection}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sectionTitle}>{t("achievements")}</Text>
+                <Text style={styles.sectionSubtitle}>
+                  {t("achievementsSubtitle")}
+                </Text>
+              </View>
+              <Ionicons name="sparkles-outline" size={22} color={colors.coral} />
+            </View>
+            {ACHIEVEMENT_CATEGORIES.map((category) => {
+              const categoryAchievements = achievements.filter(
+                (achievement) => achievement.category === category,
+              );
+              if (!categoryAchievements.length) return null;
+              return (
+                <View key={category} style={styles.achievementCategoryBlock}>
+                  <Text style={styles.achievementCategoryTitle}>
+                    {achievementCategoryLabel(category, t)}
+                  </Text>
+                  {categoryAchievements.map((achievement) => (
+                    <AchievementCard
+                      key={achievement.id}
+                      achievement={achievement}
+                    />
+                  ))}
+                </View>
+              );
+            })}
+          </View>
+
+          <Text style={styles.sectionTitle}>{t("activeGoals")}</Text>
           {progress.length ? (
             progress.map((item) => (
               <View style={styles.card} key={item.goal.id}>
                 <View style={styles.rowBetween}>
                   <Text style={styles.goalTitle}>{item.goal.title}</Text>
-                  <Text style={styles.goalType}>
-                    {item.goal.goal_type.replace("_", " ")}
-                  </Text>
+                  <Text style={styles.goalType}>{t(item.goal.goal_type)}</Text>
                 </View>
                 <Text style={styles.description}>{item.goal.description}</Text>
                 <View style={styles.progressTrack}>
@@ -185,12 +371,12 @@ export function GoalsScreen() {
                       onPress={() =>
                         run(
                           () => completeGoal(item.goal.id),
-                          "Completion added.",
+                          t("completionAdded"),
                         )
                       }
                       disabled={saving}
                     >
-                      <Text style={styles.smallBtnText}>Mark done</Text>
+                      <Text style={styles.smallBtnText}>{t("markDone")}</Text>
                     </Pressable>
                   ) : null}
                   <Pressable
@@ -198,45 +384,55 @@ export function GoalsScreen() {
                     onPress={() =>
                       run(
                         () => updateGoal(item.goal.id, { is_active: false }),
-                        "Goal paused.",
+                        t("goalPaused"),
                       )
                     }
                     disabled={saving}
                   >
-                    <Text style={styles.smallBtnLightText}>Pause</Text>
+                    <Text style={styles.smallBtnLightText}>{t("pause")}</Text>
                   </Pressable>
                   <Pressable
                     style={styles.smallBtnDanger}
                     onPress={() =>
-                      run(() => deleteGoal(item.goal.id), "Goal deleted.")
+                      run(() => deleteGoal(item.goal.id), t("goalDeleted"))
                     }
                     disabled={saving}
                   >
-                    <Text style={styles.smallBtnText}>Delete</Text>
+                    <Text style={styles.smallBtnText}>{t("delete")}</Text>
                   </Pressable>
                 </View>
               </View>
             ))
           ) : (
-            <Text style={styles.empty}>
-              No active goals yet. Start with a small supportive goal below.
-            </Text>
+            <Text style={styles.empty}>{t("noActiveGoals")}</Text>
           )}
 
-          <Text style={styles.sectionTitle}>Quick goals</Text>
-          {starterGoals.map((goal) => (
+          <Text style={styles.sectionTitle}>{t("quickGoals")}</Text>
+          {starterGoalTemplates.map((goal) => (
             <Pressable
-              key={goal.title}
+              key={goal.titleKey}
               style={styles.template}
-              onPress={() => run(() => createGoal(goal), "Goal added.")}
+              onPress={() =>
+                run(
+                  () =>
+                    createGoal({
+                      title: t(goal.titleKey),
+                      description: t(goal.descriptionKey),
+                      goal_type: goal.goal_type,
+                      target_count: goal.target_count,
+                      period: goal.period,
+                    }),
+                  t("goalAdded"),
+                )
+              }
               disabled={saving}
             >
-              <Text style={styles.templateTitle}>{goal.title}</Text>
-              <Text style={styles.description}>{goal.description}</Text>
+              <Text style={styles.templateTitle}>{t(goal.titleKey)}</Text>
+              <Text style={styles.description}>{t(goal.descriptionKey)}</Text>
             </Pressable>
           ))}
 
-          <Text style={styles.sectionTitle}>Self-care templates</Text>
+          <Text style={styles.sectionTitle}>{t("selfCareTemplates")}</Text>
           <View style={styles.templateGrid}>
             {templates.map((template) => (
               <Pressable
@@ -294,6 +490,107 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: 10,
     marginTop: 8,
+  },
+  sectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 12,
+  },
+  sectionSubtitle: {
+    color: colors.textMuted,
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
+    marginTop: -4,
+  },
+  achievementsSection: { marginBottom: 18 },
+  achievementCategoryBlock: { marginBottom: 12 },
+  achievementCategoryTitle: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    textTransform: "uppercase",
+  },
+  achievementCard: {
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#E8ECF4",
+  },
+  achievementCardCompleted: {
+    borderColor: "#FFD9D1",
+    backgroundColor: "#FFFDFC",
+  },
+  achievementTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  achievementIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F5F7FA",
+  },
+  achievementIconCompleted: { backgroundColor: "#FFF3F1" },
+  achievementTitle: { color: colors.text, fontSize: 15, fontWeight: "900" },
+  achievementDescription: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 3,
+    fontWeight: "600",
+  },
+  achievementStatus: {
+    color: colors.textMuted,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  achievementStatusCompleted: {
+    color: colors.coral,
+    backgroundColor: "#FFF3F1",
+  },
+  achievementStatusProgress: { color: colors.text, backgroundColor: "#EEF2FF" },
+  achievementProgressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 12,
+  },
+  achievementProgressTrack: {
+    flex: 1,
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: "#EEF2F7",
+    overflow: "hidden",
+  },
+  achievementProgressFill: {
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: colors.accentGreen,
+  },
+  achievementProgressText: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  achievementEncouragement: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "700",
+    marginTop: 10,
   },
   card: {
     backgroundColor: colors.white,
