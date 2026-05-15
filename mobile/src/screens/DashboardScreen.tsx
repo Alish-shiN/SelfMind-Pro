@@ -558,56 +558,36 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
         {data?.latest_quiz_action_plan ? (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>
-                {t("latestQuizActionPlan")}
-              </Text>
-              <Text style={styles.sectionHint}>
-                {data.latest_quiz_action_plan.quiz_title}
-              </Text>
+              <Text style={styles.sectionTitle}>Latest Quiz Action Plan</Text>
+              <Text style={styles.sectionHint}>{data.latest_quiz_action_plan.quiz_title}</Text>
             </View>
             <View style={styles.quizPlanCard}>
               <View style={styles.quizPlanTop}>
-                <Text style={styles.quizPlanTitle}>
-                  {data.latest_quiz_action_plan.quiz_title}
-                </Text>
-                <Text style={styles.quizPlanScore}>
-                  {Math.round(data.latest_quiz_action_plan.score)}
-                </Text>
+                <Text style={styles.quizPlanTitle}>{data.latest_quiz_action_plan.quiz_title}</Text>
+                <Text style={styles.quizPlanScore}>{Math.round(data.latest_quiz_action_plan.score)}</Text>
               </View>
               <Text style={styles.quizPlanMeta}>
-                {new Date(
-                  data.latest_quiz_action_plan.created_at,
-                ).toLocaleDateString()}{" "}
-                • {data.latest_quiz_action_plan.severity_level}
+                {new Date(data.latest_quiz_action_plan.created_at).toLocaleDateString()} • {data.latest_quiz_action_plan.severity_level}
               </Text>
               <Text style={styles.quizPlanSummary} numberOfLines={3}>
                 {data.latest_quiz_action_plan.summary}
               </Text>
-              {data.latest_quiz_action_plan.next_actions
-                .slice(0, 3)
-                .map((action) => (
-                  <View key={action} style={styles.quizPlanActionRow}>
-                    <Ionicons
-                      name="checkmark-circle-outline"
-                      size={15}
-                      color={colors.coral}
-                    />
-                    <Text style={styles.quizPlanAction}>{action}</Text>
-                  </View>
-                ))}
+              {data.latest_quiz_action_plan.next_actions.slice(0, 3).map((action) => (
+                <View key={action} style={styles.quizPlanActionRow}>
+                  <Ionicons name="checkmark-circle-outline" size={15} color={colors.coral} />
+                  <Text style={styles.quizPlanAction}>{action}</Text>
+                </View>
+              ))}
               <Pressable
                 style={styles.quizPlanButton}
-                onPress={() =>
-                  navigation.navigate("Home", { screen: "AiQuiz" })
-                }
+                onPress={() => navigation.navigate('Home', { screen: 'AiQuiz' })}
               >
-                <Text style={styles.quizPlanButtonText}>
-                  {t("viewResultOrRetakeQuiz")}
-                </Text>
+                <Text style={styles.quizPlanButtonText}>View result or retake quiz</Text>
               </Pressable>
             </View>
           </View>
         ) : null}
+
 
         {/* Mood analytics */}
         {analytics ? (
@@ -1323,30 +1303,6 @@ const styles = StyleSheet.create({
   filterChipOn: { backgroundColor: '#FFF0EE', borderColor: colors.coral },
   filterChipText: { color: colors.textMuted, fontSize: 12, fontWeight: '800', textTransform: 'capitalize' },
   filterChipTextOn: { color: colors.coral },
-
-
-  archiveCard: {
-    backgroundColor: colors.white,
-    borderRadius: 20,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#EEF2FF',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  archiveIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFF3F1',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  archiveTitle: { fontSize: 15, fontWeight: '900', color: colors.text },
-  archiveSubtitle: { fontSize: 12, color: colors.textMuted, lineHeight: 17, marginTop: 2 },
-  archiveButton: { backgroundColor: colors.coral, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
-  archiveButtonText: { color: '#fff', fontWeight: '900', fontSize: 11 },
 
   quizPlanCard: {
     backgroundColor: colors.white,

@@ -9,15 +9,15 @@ import {
   StyleSheet,
   Text,
   View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import * as Sharing from "expo-sharing";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { colors } from "../theme/colors";
-import { useAuth } from "../context/AuthContext";
-import type { RootStackParamList } from "../navigation/types";
-import { ApiError } from "../api/client";
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import * as Sharing from 'expo-sharing';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { colors } from '../theme/colors';
+import { useAuth } from '../context/AuthContext';
+import type { RootStackParamList } from '../navigation/types';
+import { ApiError } from '../api/client';
 import {
   acceptPrivacyNotice,
   AITone,
@@ -34,18 +34,13 @@ import {
   PrivacyCenterResponse,
   updateUserPreferences,
   UserPreferences,
-} from "../api/user";
-import type { UserResponse } from "../api/auth";
-import {
-  getReminderPreferences,
-  ReminderPreference,
-  updateReminderPreferences,
-} from "../api/reminders";
-import { scheduleReminderPreferences } from "../lib/notifications";
-import { supportedLanguages, useTranslation } from "../i18n/I18nContext";
+} from '../api/user';
+import type { UserResponse } from '../api/auth';
+import { getReminderPreferences, ReminderPreference, updateReminderPreferences } from '../api/reminders';
+import { scheduleReminderPreferences } from '../lib/notifications';
 
-type Props = NativeStackScreenProps<RootStackParamList, "Profile">;
-type ReminderTimeField = "journal_time" | "mood_checkin_time" | "ai_quiz_time";
+type Props = NativeStackScreenProps<RootStackParamList, 'Profile'>;
+type ReminderTimeField = 'journal_time' | 'mood_checkin_time' | 'ai_quiz_time';
 
 function formatJoined(iso: string) {
   try {
@@ -229,59 +224,12 @@ function ReminderRow({
   );
 }
 
-const GOAL_OPTIONS = [
-  "reduce_stress",
-  "understand_mood",
-  "build_routine",
-  "prepare_exams",
-  "feel_motivated",
-  "sleep_better",
-];
-const FORMAT_OPTIONS: PreferredReflectionFormat[] = ["diary", "chat", "quiz"];
-const FREQUENCY_OPTIONS: ReminderFrequency[] = [
-  "daily",
-  "few_times_week",
-  "weekly",
-  "none",
-];
-const TONE_OPTIONS: AITone[] = [
-  "calm",
-  "practical",
-  "motivating",
-  "reflective",
-];
-const COMMUNITY_VISIBILITY_OPTIONS: CommunityProfileVisibility[] = [
-  "anonymous",
-  "members",
-  "public",
-];
 
-const OPTION_LABEL_KEYS: Record<string, string> = {
-  reduce_stress: "reduceStress",
-  understand_mood: "understandMood",
-  build_routine: "buildRoutine",
-  prepare_exams: "prepareExams",
-  feel_motivated: "feelMotivated",
-  sleep_better: "sleepBetter",
-  diary: "diary",
-  chat: "chat",
-  quiz: "quiz",
-  daily: "daily",
-  few_times_week: "fewTimesWeek",
-  weekly: "weekly",
-  none: "none",
-  calm: "calm",
-  practical: "practical",
-  motivating: "motivating",
-  reflective: "reflective",
-  anonymous: "anonymous",
-  members: "members",
-  public: "public",
-};
-
-function optionLabel(value: string, t: (key: string) => string) {
-  return t(OPTION_LABEL_KEYS[value] ?? value);
-}
+const GOAL_OPTIONS = ['reduce_stress', 'understand_mood', 'build_routine', 'prepare_exams', 'feel_motivated', 'sleep_better'];
+const FORMAT_OPTIONS: PreferredReflectionFormat[] = ['diary', 'chat', 'quiz'];
+const FREQUENCY_OPTIONS: ReminderFrequency[] = ['daily', 'few_times_week', 'weekly', 'none'];
+const TONE_OPTIONS: AITone[] = ['calm', 'practical', 'motivating', 'reflective'];
+const COMMUNITY_VISIBILITY_OPTIONS: CommunityProfileVisibility[] = ['anonymous', 'members', 'public'];
 
 function PersonalizationPreferencesModal({
   visible,
@@ -294,7 +242,6 @@ function PersonalizationPreferencesModal({
   onClose: () => void;
   onSaved: (preferences: UserPreferences) => void;
 }) {
-  const { language, setLanguage, t } = useTranslation();
   const [draft, setDraft] = useState<UserPreferences | null>(preferences);
   const [saving, setSaving] = useState(false);
 
@@ -305,217 +252,69 @@ function PersonalizationPreferencesModal({
   if (!draft) return null;
 
   const toggleGoal = (goal: string) => {
-    setDraft((current) =>
-      current
-        ? {
-            ...current,
-            emotional_goals: current.emotional_goals.includes(goal)
-              ? current.emotional_goals.filter((item) => item !== goal)
-              : [...current.emotional_goals, goal],
-          }
-        : current,
-    );
+    setDraft((current) => current ? {
+      ...current,
+      emotional_goals: current.emotional_goals.includes(goal)
+        ? current.emotional_goals.filter((item) => item !== goal)
+        : [...current.emotional_goals, goal],
+    } : current);
   };
 
   const save = async () => {
     setSaving(true);
     try {
-      const updated = await updateUserPreferences({
-        ...draft,
-        onboarding_completed: true,
-      });
+      const updated = await updateUserPreferences({ ...draft, onboarding_completed: true });
       onSaved(updated);
       onClose();
     } catch (e) {
-      Alert.alert(
-        t("preferencesError"),
-        e instanceof ApiError ? e.message : t("couldNotSavePreferences"),
-      );
+      Alert.alert('Preferences error', e instanceof ApiError ? e.message : 'Could not save preferences.');
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-    >
-      <SafeAreaView style={styles.prefModalSafe} edges={["top", "bottom"]}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+      <SafeAreaView style={styles.prefModalSafe} edges={['top', 'bottom']}>
         <View style={styles.prefModalTop}>
-          <Pressable onPress={onClose}>
-            <Text style={styles.timeCancelText}>{t("cancel")}</Text>
-          </Pressable>
-          <Text style={styles.title}>{t("personalizationPrefs")}</Text>
+          <Pressable onPress={onClose}><Text style={styles.timeCancelText}>Cancel</Text></Pressable>
+          <Text style={styles.title}>AI & Reflection</Text>
           <Pressable onPress={save} disabled={saving}>
-            {saving ? (
-              <ActivityIndicator color={colors.coral} />
-            ) : (
-              <Text style={styles.prefSaveText}>{t("save")}</Text>
-            )}
+            {saving ? <ActivityIndicator color={colors.coral} /> : <Text style={styles.prefSaveText}>Save</Text>}
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={styles.prefModalBody}>
-          <Text style={styles.sectionLabel}>{t("language")}</Text>
-          <View style={styles.prefChipWrap}>
-            {supportedLanguages.map((item) => (
-              <Pressable
-                key={item.key}
-                style={[
-                  styles.prefChip,
-                  language === item.key && styles.prefChipOn,
-                ]}
-                onPress={() => setLanguage(item.key)}
-              >
-                <Text
-                  style={[
-                    styles.prefChipText,
-                    language === item.key && styles.prefChipTextOn,
-                  ]}
-                >
-                  {item.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
-          <Text style={styles.sectionLabel}>{t("emotionalGoals")}</Text>
+          <Text style={styles.sectionLabel}>Emotional goals</Text>
           <View style={styles.prefChipWrap}>
             {GOAL_OPTIONS.map((goal) => (
-              <Pressable
-                key={goal}
-                style={[
-                  styles.prefChip,
-                  draft.emotional_goals.includes(goal) && styles.prefChipOn,
-                ]}
-                onPress={() => toggleGoal(goal)}
-              >
-                <Text
-                  style={[
-                    styles.prefChipText,
-                    draft.emotional_goals.includes(goal) &&
-                      styles.prefChipTextOn,
-                  ]}
-                >
-                  {optionLabel(goal, t)}
-                </Text>
+              <Pressable key={goal} style={[styles.prefChip, draft.emotional_goals.includes(goal) && styles.prefChipOn]} onPress={() => toggleGoal(goal)}>
+                <Text style={[styles.prefChipText, draft.emotional_goals.includes(goal) && styles.prefChipTextOn]}>{goal.replace(/_/g, ' ')}</Text>
               </Pressable>
             ))}
           </View>
 
-          <PreferencePicker
-            title={t("reflectionFormat")}
-            options={FORMAT_OPTIONS}
-            value={draft.preferred_reflection_format}
-            onSelect={(value) =>
-              setDraft({
-                ...draft,
-                preferred_reflection_format: value as PreferredReflectionFormat,
-              })
-            }
-          />
-          <PreferencePicker
-            title={t("reminderFrequency")}
-            options={FREQUENCY_OPTIONS}
-            value={draft.reminder_frequency}
-            onSelect={(value) =>
-              setDraft({
-                ...draft,
-                reminder_frequency: value as ReminderFrequency,
-              })
-            }
-          />
-          <PreferencePicker
-            title={t("aiTone")}
-            options={TONE_OPTIONS}
-            value={draft.ai_tone}
-            onSelect={(value) =>
-              setDraft({ ...draft, ai_tone: value as AITone })
-            }
-          />
+          <PreferencePicker title="Reflection format" options={FORMAT_OPTIONS} value={draft.preferred_reflection_format} onSelect={(value) => setDraft({ ...draft, preferred_reflection_format: value as PreferredReflectionFormat })} />
+          <PreferencePicker title="Reminder frequency" options={FREQUENCY_OPTIONS} value={draft.reminder_frequency} onSelect={(value) => setDraft({ ...draft, reminder_frequency: value as ReminderFrequency })} />
+          <PreferencePicker title="AI tone" options={TONE_OPTIONS} value={draft.ai_tone} onSelect={(value) => setDraft({ ...draft, ai_tone: value as AITone })} />
 
-          <Text style={styles.sectionLabel}>{t("privacy")}</Text>
-          <PreferenceToggle
-            label={t("privateDiaryDefault")}
-            value={draft.privacy_preferences.journal_private_default}
-            onPress={() =>
-              setDraft({
-                ...draft,
-                privacy_preferences: {
-                  ...draft.privacy_preferences,
-                  journal_private_default:
-                    !draft.privacy_preferences.journal_private_default,
-                },
-              })
-            }
-          />
-          <PreferenceToggle
-            label={t("anonymousCommunityDefault")}
-            value={draft.privacy_preferences.anonymous_community_default}
-            onPress={() =>
-              setDraft({
-                ...draft,
-                privacy_preferences: {
-                  ...draft.privacy_preferences,
-                  anonymous_community_default:
-                    !draft.privacy_preferences.anonymous_community_default,
-                },
-              })
-            }
-          />
-          <PreferenceToggle
-            label={t("shareAiInsightsPersonalization")}
-            value={draft.privacy_preferences.share_ai_insights}
-            onPress={() =>
-              setDraft({
-                ...draft,
-                privacy_preferences: {
-                  ...draft.privacy_preferences,
-                  share_ai_insights:
-                    !draft.privacy_preferences.share_ai_insights,
-                  ai_processing_consent:
-                    !draft.privacy_preferences.share_ai_insights,
-                },
-              })
-            }
-          />
+          <Text style={styles.sectionLabel}>Privacy</Text>
+          <PreferenceToggle label="Private diary entries by default" value={draft.privacy_preferences.journal_private_default} onPress={() => setDraft({ ...draft, privacy_preferences: { ...draft.privacy_preferences, journal_private_default: !draft.privacy_preferences.journal_private_default } })} />
+          <PreferenceToggle label="Anonymous community by default" value={draft.privacy_preferences.anonymous_community_default} onPress={() => setDraft({ ...draft, privacy_preferences: { ...draft.privacy_preferences, anonymous_community_default: !draft.privacy_preferences.anonymous_community_default } })} />
+          <PreferenceToggle label="Share AI insights for personalization" value={draft.privacy_preferences.share_ai_insights} onPress={() => setDraft({ ...draft, privacy_preferences: { ...draft.privacy_preferences, share_ai_insights: !draft.privacy_preferences.share_ai_insights, ai_processing_consent: !draft.privacy_preferences.share_ai_insights } })} />
         </ScrollView>
       </SafeAreaView>
     </Modal>
   );
 }
 
-function PreferencePicker({
-  title,
-  options,
-  value,
-  onSelect,
-}: {
-  title: string;
-  options: string[];
-  value: string;
-  onSelect: (value: string) => void;
-}) {
-  const { t } = useTranslation();
+function PreferencePicker({ title, options, value, onSelect }: { title: string; options: string[]; value: string; onSelect: (value: string) => void }) {
   return (
     <View style={{ marginTop: 18 }}>
       <Text style={styles.sectionLabel}>{title}</Text>
       <View style={styles.prefChipWrap}>
         {options.map((item) => (
-          <Pressable
-            key={item}
-            style={[styles.prefChip, value === item && styles.prefChipOn]}
-            onPress={() => onSelect(item)}
-          >
-            <Text
-              style={[
-                styles.prefChipText,
-                value === item && styles.prefChipTextOn,
-              ]}
-            >
-              {optionLabel(item, t)}
-            </Text>
+          <Pressable key={item} style={[styles.prefChip, value === item && styles.prefChipOn]} onPress={() => onSelect(item)}>
+            <Text style={[styles.prefChipText, value === item && styles.prefChipTextOn]}>{item.replace(/_/g, ' ')}</Text>
           </Pressable>
         ))}
       </View>
@@ -523,40 +322,23 @@ function PreferencePicker({
   );
 }
 
-function PreferenceToggle({
-  label,
-  value,
-  onPress,
-}: {
-  label: string;
-  value: boolean;
-  onPress: () => void;
-}) {
-  const { t } = useTranslation();
+function PreferenceToggle({ label, value, onPress }: { label: string; value: boolean; onPress: () => void }) {
   return (
     <Pressable style={styles.prefToggleRow} onPress={onPress}>
       <Text style={styles.infoValue}>{label}</Text>
-      <Text style={[styles.toggleText, value && { color: colors.coral }]}>
-        {value ? t("on") : t("off")}
-      </Text>
+      <Text style={[styles.toggleText, value && { color: colors.coral }]}>{value ? 'On' : 'Off'}</Text>
     </Pressable>
   );
 }
 
-function PrivacyCenterModal({
-  visible,
-  preferences,
-  onClose,
-  onSaved,
-  onDeleted,
-}: {
+
+function PrivacyCenterModal({ visible, preferences, onClose, onSaved, onDeleted }: {
   visible: boolean;
   preferences: UserPreferences | null;
   onClose: () => void;
   onSaved: (preferences: UserPreferences) => void;
   onDeleted: () => Promise<void> | void;
 }) {
-  const { t } = useTranslation();
   const [center, setCenter] = useState<PrivacyCenterResponse | null>(null);
   const [draft, setDraft] = useState<UserPreferences | null>(preferences);
   const [saving, setSaving] = useState(false);
@@ -576,32 +358,21 @@ function PrivacyCenterModal({
 
   if (!draft) return null;
 
-  const setPrivacy = (
-    patch: Partial<UserPreferences["privacy_preferences"]>,
-  ) => {
-    setDraft((current) =>
-      current
-        ? {
-            ...current,
-            privacy_preferences: { ...current.privacy_preferences, ...patch },
-          }
-        : current,
-    );
+  const setPrivacy = (patch: Partial<UserPreferences['privacy_preferences']>) => {
+    setDraft((current) => current ? {
+      ...current,
+      privacy_preferences: { ...current.privacy_preferences, ...patch },
+    } : current);
   };
 
   const save = async () => {
     setSaving(true);
     try {
-      const updated = await updateUserPreferences({
-        privacy_preferences: draft.privacy_preferences,
-      });
+      const updated = await updateUserPreferences({ privacy_preferences: draft.privacy_preferences });
       onSaved(updated);
-      Alert.alert(t("privacySaved"), t("privacySavedMessage"));
+      Alert.alert('Privacy saved', 'Your privacy center settings have been updated.');
     } catch (e) {
-      Alert.alert(
-        t("privacyError"),
-        e instanceof ApiError ? e.message : t("couldNotSavePrivacy"),
-      );
+      Alert.alert('Privacy error', e instanceof ApiError ? e.message : 'Could not save privacy settings.');
     } finally {
       setSaving(false);
     }
@@ -613,36 +384,25 @@ function PrivacyCenterModal({
       const updated = await acceptPrivacyNotice();
       setDraft(updated);
       onSaved(updated);
-      Alert.alert(t("noticeAccepted"), t("consentRecorded"));
+      Alert.alert('Notice accepted', 'Your consent was recorded.');
     } catch (e) {
-      Alert.alert(
-        t("consentError"),
-        e instanceof ApiError ? e.message : t("couldNotRecordConsent"),
-      );
+      Alert.alert('Consent error', e instanceof ApiError ? e.message : 'Could not record consent.');
     } finally {
       setSaving(false);
     }
   };
 
-  const exportData = async (
-    exportType: PersonalExportType,
-    labelKey: string,
-  ) => {
+  const exportData = async (exportType: PersonalExportType, label: string) => {
     setSaving(true);
-    setExportStatus(t("preparingExport"));
+    setExportStatus(`Preparing ${label}…`);
     try {
       const data = await exportPersonalData(exportType);
-      setExportStatus(
-        `${t(labelKey)} ${t("exportReady").toLowerCase()}: ${Object.keys(data).join(", ")}`,
-      );
-      Alert.alert(t("exportReady"), t("exportGeneratedSensitive"));
+      setExportStatus(`${label} ready: ${Object.keys(data).join(', ')}`);
+      Alert.alert(`${label} ready`, 'Export generated successfully. Treat this as sensitive-like emotional data.');
     } catch (e) {
-      const message =
-        e instanceof ApiError
-          ? e.message
-          : `${t("couldNotExport")} ${t(labelKey)}.`;
+      const message = e instanceof ApiError ? e.message : `Could not export ${label}.`;
       setExportStatus(message);
-      Alert.alert(t("exportError"), message);
+      Alert.alert('Export error', message);
     } finally {
       setSaving(false);
     }
@@ -650,57 +410,48 @@ function PrivacyCenterModal({
 
   const downloadPdfReport = async () => {
     setSaving(true);
-    setExportStatus(t("generatingPdf"));
+    setExportStatus('Generating PDF report...');
     try {
       const pdf = await downloadWeeklyPdfReport();
       const sizeKb = Math.max(1, Math.round(pdf.size / 1024));
-      setExportStatus(
-        `${t("pdfSaved")} ${pdf.localUri} (${sizeKb} KB). ${t("openingShareOptions")}`,
-      );
+      setExportStatus(`PDF saved to ${pdf.localUri} (${sizeKb} KB). Opening share options...`);
 
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
         await Sharing.shareAsync(pdf.localUri, {
-          mimeType: "application/pdf",
-          UTI: "com.adobe.pdf",
-          dialogTitle: t("openSharePdf"),
+          mimeType: 'application/pdf',
+          UTI: 'com.adobe.pdf',
+          dialogTitle: 'Open or share SelfMind weekly report',
         });
-        setExportStatus(`${t("pdfGenerated")} ${pdf.localUri}.`);
-        Alert.alert(t("pdfGenerated"), t("pdfGeneratedMessage"));
+        setExportStatus(`PDF report was generated and saved to ${pdf.localUri}.`);
+        Alert.alert('PDF report was generated.', 'You can reopen it from your device share destination if you saved it.');
       } else {
-        setExportStatus(`${t("sharingUnavailable")} ${pdf.localUri}.`);
-        Alert.alert(
-          t("pdfSaved"),
-          `${t("sharingUnavailable")}
-${pdf.localUri}`,
-        );
+        setExportStatus(`Sharing is unavailable. PDF saved to ${pdf.localUri}.`);
+        Alert.alert('PDF report saved', `Sharing is unavailable on this device. The file was saved temporarily at:
+${pdf.localUri}`);
       }
     } catch (e) {
-      const message =
-        e instanceof ApiError ? e.message : t("couldNotGeneratePdf");
+      const message = e instanceof ApiError ? e.message : 'Could not generate weekly PDF report.';
       setExportStatus(message);
-      Alert.alert(t("pdfReportError"), message);
+      Alert.alert('PDF report error', message);
     } finally {
       setSaving(false);
     }
   };
 
   const confirmDelete = () => {
-    Alert.alert(t("deleteAccountConfirmTitle"), t("deleteAccountConfirm"), [
-      { text: t("cancel"), style: "cancel" },
+    Alert.alert('Delete account and data?', 'This permanently deletes your account and associated journals, AI data, reminders, and community content. This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
       {
-        text: t("deleteAllData"),
-        style: "destructive",
+        text: 'Delete all data',
+        style: 'destructive',
         onPress: async () => {
           setSaving(true);
           try {
             await deleteUserAccount();
             await onDeleted();
           } catch (e) {
-            Alert.alert(
-              t("deleteError"),
-              e instanceof ApiError ? e.message : t("couldNotDeleteAccount"),
-            );
+            Alert.alert('Delete error', e instanceof ApiError ? e.message : 'Could not delete your account.');
           } finally {
             setSaving(false);
           }
@@ -710,189 +461,66 @@ ${pdf.localUri}`,
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-    >
-      <SafeAreaView style={styles.prefModalSafe} edges={["top", "bottom"]}>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+      <SafeAreaView style={styles.prefModalSafe} edges={['top', 'bottom']}>
         <View style={styles.prefModalTop}>
-          <Pressable onPress={onClose}>
-            <Text style={styles.timeCancelText}>{t("close")}</Text>
-          </Pressable>
-          <Text style={styles.title}>{t("privacyCenter")}</Text>
+          <Pressable onPress={onClose}><Text style={styles.timeCancelText}>Close</Text></Pressable>
+          <Text style={styles.title}>Privacy Center</Text>
           <Pressable onPress={save} disabled={saving}>
-            {saving ? (
-              <ActivityIndicator color={colors.coral} />
-            ) : (
-              <Text style={styles.prefSaveText}>{t("save")}</Text>
-            )}
+            {saving ? <ActivityIndicator color={colors.coral} /> : <Text style={styles.prefSaveText}>Save</Text>}
           </Pressable>
         </View>
         <ScrollView contentContainerStyle={styles.prefModalBody}>
           <View style={styles.privacyNoticeCard}>
-            <Ionicons
-              name="shield-checkmark-outline"
-              size={24}
-              color={colors.coral}
-            />
-            <Text style={styles.privacyTitle}>
-              {center?.notice.title ?? t("privacyTitle")}
-            </Text>
-            <Text style={styles.privacyText}>
-              {center?.notice.summary ?? t("privacySummaryFallback")}
-            </Text>
-            <Text style={styles.privacyText}>
-              {center?.notice.emotional_data_notice ??
-                t("emotionalDataNoticeFallback")}
-            </Text>
+            <Ionicons name="shield-checkmark-outline" size={24} color={colors.coral} />
+            <Text style={styles.privacyTitle}>{center?.notice.title ?? 'SelfMind Pro Privacy Center'}</Text>
+            <Text style={styles.privacyText}>{center?.notice.summary ?? 'We treat emotional data as sensitive-like data.'}</Text>
+            <Text style={styles.privacyText}>{center?.notice.emotional_data_notice ?? 'Journal entries, mood scores, AI reflections, and community activity can reveal emotional patterns and should be protected.'}</Text>
           </View>
 
-          <Text style={styles.sectionLabel}>{t("entryPrivacy")}</Text>
-          <PreferenceToggle
-            label={t("newEntriesPrivateDefault")}
-            value={draft.privacy_preferences.journal_private_default}
-            onPress={() =>
-              setPrivacy({
-                journal_private_default:
-                  !draft.privacy_preferences.journal_private_default,
-              })
-            }
-          />
-          <PreferenceToggle
-            label={t("communityPostsAnonymousDefault")}
-            value={draft.privacy_preferences.anonymous_community_default}
-            onPress={() =>
-              setPrivacy({
-                anonymous_community_default:
-                  !draft.privacy_preferences.anonymous_community_default,
-              })
-            }
-          />
-          <PreferencePicker
-            title={t("communityProfileVisibility")}
-            options={COMMUNITY_VISIBILITY_OPTIONS}
-            value={draft.privacy_preferences.community_profile_visibility}
-            onSelect={(value) =>
-              setPrivacy({
-                community_profile_visibility:
-                  value as CommunityProfileVisibility,
-              })
-            }
-          />
+          <Text style={styles.sectionLabel}>Entry privacy</Text>
+          <PreferenceToggle label="New entries private by default" value={draft.privacy_preferences.journal_private_default} onPress={() => setPrivacy({ journal_private_default: !draft.privacy_preferences.journal_private_default })} />
+          <PreferenceToggle label="Community posts anonymous by default" value={draft.privacy_preferences.anonymous_community_default} onPress={() => setPrivacy({ anonymous_community_default: !draft.privacy_preferences.anonymous_community_default })} />
+          <PreferencePicker title="Community profile visibility" options={COMMUNITY_VISIBILITY_OPTIONS} value={draft.privacy_preferences.community_profile_visibility} onSelect={(value) => setPrivacy({ community_profile_visibility: value as CommunityProfileVisibility })} />
 
-          <Text style={styles.sectionLabel}>{t("aiProcessingStorage")}</Text>
-          <PreferenceToggle
-            label={t("allowAiInsights")}
-            value={draft.privacy_preferences.share_ai_insights}
-            onPress={() =>
-              setPrivacy({
-                share_ai_insights: !draft.privacy_preferences.share_ai_insights,
-                ai_processing_consent:
-                  !draft.privacy_preferences.share_ai_insights,
-              })
-            }
-          />
-          {(center?.notice.ai_processing ?? []).map((item) => (
-            <Text key={item} style={styles.bulletText}>
-              • {item}
-            </Text>
-          ))}
-          {(center?.notice.stored_data ?? []).map((item) => (
-            <Text key={item} style={styles.bulletText}>
-              • {item}
-            </Text>
-          ))}
+          <Text style={styles.sectionLabel}>AI processing and storage</Text>
+          <PreferenceToggle label="Allow AI insights to personalize future support" value={draft.privacy_preferences.share_ai_insights} onPress={() => setPrivacy({ share_ai_insights: !draft.privacy_preferences.share_ai_insights, ai_processing_consent: !draft.privacy_preferences.share_ai_insights })} />
+          {(center?.notice.ai_processing ?? []).map((item) => <Text key={item} style={styles.bulletText}>• {item}</Text>)}
+          {(center?.notice.stored_data ?? []).map((item) => <Text key={item} style={styles.bulletText}>• {item}</Text>)}
 
-          <Text style={styles.sectionLabel}>{t("exportReports")}</Text>
+          <Text style={styles.sectionLabel}>Export & Reports</Text>
           <View style={styles.privacyActionsCard}>
-            <Pressable
-              style={[styles.privacyActionBtn, styles.secondaryActionBtn]}
-              onPress={() => exportData("journal", "exportJournalHistory")}
-              disabled={saving}
-            >
+            <Pressable style={[styles.privacyActionBtn, styles.secondaryActionBtn]} onPress={() => exportData('journal', 'Journal history export')} disabled={saving}>
               <Ionicons name="book-outline" size={18} color={colors.coral} />
-              <Text style={styles.secondaryActionText}>
-                {t("exportJournalHistory")}
-              </Text>
+              <Text style={styles.secondaryActionText}>Export journal history</Text>
             </Pressable>
-            <Pressable
-              style={[styles.privacyActionBtn, styles.secondaryActionBtn]}
-              onPress={() => exportData("mood", "exportMoodHistory")}
-              disabled={saving}
-            >
-              <Ionicons
-                name="analytics-outline"
-                size={18}
-                color={colors.coral}
-              />
-              <Text style={styles.secondaryActionText}>
-                {t("exportMoodHistory")}
-              </Text>
+            <Pressable style={[styles.privacyActionBtn, styles.secondaryActionBtn]} onPress={() => exportData('mood', 'Mood history export')} disabled={saving}>
+              <Ionicons name="analytics-outline" size={18} color={colors.coral} />
+              <Text style={styles.secondaryActionText}>Export mood history</Text>
             </Pressable>
-            <Pressable
-              style={[styles.privacyActionBtn, styles.secondaryActionBtn]}
-              onPress={() => exportData("insights", "exportInsights")}
-              disabled={saving}
-            >
-              <Ionicons
-                name="sparkles-outline"
-                size={18}
-                color={colors.coral}
-              />
-              <Text style={styles.secondaryActionText}>
-                {t("exportInsights")}
-              </Text>
+            <Pressable style={[styles.privacyActionBtn, styles.secondaryActionBtn]} onPress={() => exportData('insights', 'Insights archive export')} disabled={saving}>
+              <Ionicons name="sparkles-outline" size={18} color={colors.coral} />
+              <Text style={styles.secondaryActionText}>Export insights archive</Text>
             </Pressable>
-            <Pressable
-              style={[styles.privacyActionBtn, styles.secondaryActionBtn]}
-              onPress={() => exportData("full", "exportFullPersonalData")}
-              disabled={saving}
-            >
+            <Pressable style={[styles.privacyActionBtn, styles.secondaryActionBtn]} onPress={() => exportData('full', 'Full personal data export')} disabled={saving}>
               <Ionicons name="archive-outline" size={18} color={colors.coral} />
-              <Text style={styles.secondaryActionText}>
-                {t("exportFullPersonalData")}
-              </Text>
+              <Text style={styles.secondaryActionText}>Export full personal data</Text>
             </Pressable>
-            <Pressable
-              style={styles.privacyActionBtn}
-              onPress={downloadPdfReport}
-              disabled={saving}
-            >
+            <Pressable style={styles.privacyActionBtn} onPress={downloadPdfReport} disabled={saving}>
               <Ionicons name="document-text-outline" size={18} color="#fff" />
-              <Text style={styles.privacyActionText}>
-                {t("downloadWeeklyPdf")}
-              </Text>
+              <Text style={styles.privacyActionText}>Download weekly PDF report</Text>
             </Pressable>
-            {exportStatus ? (
-              <Text style={styles.privacyText}>{exportStatus}</Text>
-            ) : null}
+            {exportStatus ? <Text style={styles.privacyText}>{exportStatus}</Text> : null}
           </View>
 
           <View style={styles.privacyActionsCard}>
-            <Pressable
-              style={styles.privacyActionBtn}
-              onPress={acceptNotice}
-              disabled={saving}
-            >
-              <Ionicons
-                name="checkmark-circle-outline"
-                size={18}
-                color="#fff"
-              />
-              <Text style={styles.privacyActionText}>
-                {draft.privacy_preferences.privacy_notice_accepted
-                  ? t("reacceptPrivacyNotice")
-                  : t("acceptPrivacyNotice")}
-              </Text>
+            <Pressable style={styles.privacyActionBtn} onPress={acceptNotice} disabled={saving}>
+              <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
+              <Text style={styles.privacyActionText}>{draft.privacy_preferences.privacy_notice_accepted ? 'Re-accept privacy notice' : 'Accept privacy notice'}</Text>
             </Pressable>
-            <Pressable
-              style={[styles.privacyActionBtn, styles.dangerActionBtn]}
-              onPress={confirmDelete}
-              disabled={saving}
-            >
+            <Pressable style={[styles.privacyActionBtn, styles.dangerActionBtn]} onPress={confirmDelete} disabled={saving}>
               <Ionicons name="trash-outline" size={18} color="#fff" />
-              <Text style={styles.privacyActionText}>{t("deleteAccount")}</Text>
+              <Text style={styles.privacyActionText}>Delete account + all data</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -1109,193 +737,81 @@ export function ProfileScreen({ navigation }: Props) {
               </View>
             </View>
 
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>{t("reflectionTools")}</Text>
-              <View style={styles.infoCard}>
-                <Pressable
-                  style={styles.infoRow}
-                  onPress={() => navigation.navigate("ArchiveSearch")}
-                >
-                  <Ionicons
-                    name="search-outline"
-                    size={20}
-                    color={colors.coral}
-                  />
-                  <View style={styles.infoTextWrap}>
-                    <Text style={styles.infoLabel}>{t("archiveSearch")}</Text>
-                    <Text style={styles.infoValue}>
-                      {t("archiveSearchDesc")}
-                    </Text>
-                  </View>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={18}
-                    color={colors.textMuted}
-                  />
-                </Pressable>
-              </View>
-            </View>
+
 
             {preferences ? (
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>
-                  {t("personalizationPrefs")}
-                </Text>
+                <Text style={styles.sectionLabel}>Personalization / AI & Reflection Preferences</Text>
                 <View style={styles.infoCard}>
                   <View style={styles.infoRow}>
-                    <Ionicons
-                      name="sparkles-outline"
-                      size={20}
-                      color={colors.coral}
-                    />
+                    <Ionicons name="sparkles-outline" size={20} color={colors.coral} />
                     <View style={styles.infoTextWrap}>
-                      <Text style={styles.infoLabel}>{t("aiTone")}</Text>
-                      <Text style={styles.infoValue}>
-                        {preferences.ai_tone}
-                      </Text>
+                      <Text style={styles.infoLabel}>AI tone</Text>
+                      <Text style={styles.infoValue}>{preferences.ai_tone}</Text>
                     </View>
                   </View>
                   <View style={styles.divider} />
                   <View style={styles.infoRow}>
-                    <Ionicons
-                      name="journal-outline"
-                      size={20}
-                      color={colors.coral}
-                    />
+                    <Ionicons name="journal-outline" size={20} color={colors.coral} />
                     <View style={styles.infoTextWrap}>
-                      <Text style={styles.infoLabel}>
-                        {t("reflectionFormat")}
-                      </Text>
-                      <Text style={styles.infoValue}>
-                        {preferences.preferred_reflection_format}
-                      </Text>
+                      <Text style={styles.infoLabel}>Reflection format</Text>
+                      <Text style={styles.infoValue}>{preferences.preferred_reflection_format}</Text>
                     </View>
                   </View>
                   <View style={styles.divider} />
                   <View style={styles.infoRow}>
-                    <Ionicons
-                      name="heart-outline"
-                      size={20}
-                      color={colors.coral}
-                    />
+                    <Ionicons name="heart-outline" size={20} color={colors.coral} />
                     <View style={styles.infoTextWrap}>
-                      <Text style={styles.infoLabel}>{t("goals")}</Text>
+                      <Text style={styles.infoLabel}>Goals</Text>
                       <Text style={styles.infoValue}>
-                        {preferences.emotional_goals.length
-                          ? preferences.emotional_goals
-                              .map((goal) => optionLabel(goal, t))
-                              .join(", ")
-                          : t("notSelectedYet")}
+                        {preferences.emotional_goals.length ? preferences.emotional_goals.map((goal) => goal.replace(/_/g, ' ')).join(', ') : 'Not selected yet'}
                       </Text>
                     </View>
                   </View>
                   <View style={styles.divider} />
-                  <View style={styles.infoRow}>
-                    <Ionicons
-                      name="language-outline"
-                      size={20}
-                      color={colors.coral}
-                    />
-                    <View style={styles.infoTextWrap}>
-                      <Text style={styles.infoLabel}>{t("language")}</Text>
-                      <Text style={styles.infoValue}>
-                        {supportedLanguages.find(
-                          (item) => item.key === language,
-                        )?.label ?? t("english")}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.divider} />
-                  <Pressable
-                    style={styles.editPrefsRow}
-                    onPress={() => setPreferencesModalVisible(true)}
-                  >
-                    <Text style={styles.editPrefsText}>
-                      {t("editPersonalization")}
-                    </Text>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={18}
-                      color={colors.coral}
-                    />
+                  <Pressable style={styles.editPrefsRow} onPress={() => setPreferencesModalVisible(true)}>
+                    <Text style={styles.editPrefsText}>Edit personalization preferences</Text>
+                    <Ionicons name="chevron-forward" size={18} color={colors.coral} />
                   </Pressable>
                 </View>
               </View>
             ) : null}
 
+
             {preferences ? (
               <View style={styles.section}>
-                <Text style={styles.sectionLabel}>{t("privacyCenter")}</Text>
+                <Text style={styles.sectionLabel}>Privacy Center</Text>
                 <View style={styles.infoCard}>
                   <View style={styles.infoRow}>
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={20}
-                      color={colors.coral}
-                    />
+                    <Ionicons name="lock-closed-outline" size={20} color={colors.coral} />
                     <View style={styles.infoTextWrap}>
-                      <Text style={styles.infoLabel}>{t("entryDefault")}</Text>
-                      <Text style={styles.infoValue}>
-                        {preferences.privacy_preferences.journal_private_default
-                          ? t("privateJournalEntries")
-                          : t("publicJournalEntries")}
-                      </Text>
+                      <Text style={styles.infoLabel}>Entry default</Text>
+                      <Text style={styles.infoValue}>{preferences.privacy_preferences.journal_private_default ? 'Private journal entries' : 'Public journal entries'}</Text>
                     </View>
                   </View>
                   <View style={styles.divider} />
                   <View style={styles.infoRow}>
-                    <Ionicons
-                      name="people-outline"
-                      size={20}
-                      color={colors.coral}
-                    />
+                    <Ionicons name="people-outline" size={20} color={colors.coral} />
                     <View style={styles.infoTextWrap}>
-                      <Text style={styles.infoLabel}>
-                        {t("communityVisibility")}
-                      </Text>
-                      <Text style={styles.infoValue}>
-                        {optionLabel(
-                          preferences.privacy_preferences
-                            .community_profile_visibility,
-                          t,
-                        )}
-                      </Text>
+                      <Text style={styles.infoLabel}>Community visibility</Text>
+                      <Text style={styles.infoValue}>{preferences.privacy_preferences.community_profile_visibility}</Text>
                     </View>
                   </View>
                   <View style={styles.divider} />
                   <View style={styles.infoRow}>
-                    <Ionicons
-                      name="hardware-chip-outline"
-                      size={20}
-                      color={colors.coral}
-                    />
+                    <Ionicons name="hardware-chip-outline" size={20} color={colors.coral} />
                     <View style={styles.infoTextWrap}>
-                      <Text style={styles.infoLabel}>
-                        {t("aiPersonalizationConsent")}
-                      </Text>
-                      <Text style={styles.infoValue}>
-                        {preferences.privacy_preferences.ai_processing_consent
-                          ? t("enabled")
-                          : t("notEnabled")}
-                      </Text>
+                      <Text style={styles.infoLabel}>AI personalization consent</Text>
+                      <Text style={styles.infoValue}>{preferences.privacy_preferences.ai_processing_consent ? 'Enabled' : 'Not enabled'}</Text>
                     </View>
                   </View>
                   <View style={styles.divider} />
-                  <Pressable
-                    style={styles.editPrefsRow}
-                    onPress={() => setPrivacyModalVisible(true)}
-                  >
-                    <Text style={styles.editPrefsText}>
-                      {t("openPrivacyCenter")}
-                    </Text>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={18}
-                      color={colors.coral}
-                    />
+                  <Pressable style={styles.editPrefsRow} onPress={() => setPrivacyModalVisible(true)}>
+                    <Text style={styles.editPrefsText}>Open privacy center</Text>
+                    <Ionicons name="chevron-forward" size={18} color={colors.coral} />
                   </Pressable>
                 </View>
-                <Text style={styles.reminderHint}>{t("privacyHint")}</Text>
+                <Text style={styles.reminderHint}>Emotional data is treated as sensitive-like data. Review what AI processes, export your data, or delete your account here.</Text>
               </View>
             ) : null}
 
@@ -1571,118 +1087,65 @@ const styles = StyleSheet.create({
   timeOptionActive: { backgroundColor: "#FFF3F1" },
   timeOptionText: { fontSize: 16, fontWeight: "800", color: colors.textMuted },
   timeOptionTextActive: { color: colors.coral },
-  timeModalActions: { flexDirection: "row", gap: 10, marginTop: 14 },
-  timeCancelBtn: {
-    flex: 1,
-    paddingVertical: 13,
-    borderRadius: 16,
-    alignItems: "center",
-    backgroundColor: "#EEF2F7",
-  },
-  timeCancelText: { color: colors.textMuted, fontWeight: "900" },
-  timeSaveBtn: {
-    flex: 1,
-    paddingVertical: 13,
-    borderRadius: 16,
-    alignItems: "center",
-    backgroundColor: colors.coral,
-  },
-  timeSaveText: { color: "#fff", fontWeight: "900" },
+  timeModalActions: { flexDirection: 'row', gap: 10, marginTop: 14 },
+  timeCancelBtn: { flex: 1, paddingVertical: 13, borderRadius: 16, alignItems: 'center', backgroundColor: '#EEF2F7' },
+  timeCancelText: { color: colors.textMuted, fontWeight: '900' },
+  timeSaveBtn: { flex: 1, paddingVertical: 13, borderRadius: 16, alignItems: 'center', backgroundColor: colors.coral },
+  timeSaveText: { color: '#fff', fontWeight: '900' },
 
   editPrefsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingVertical: 14,
     paddingHorizontal: 16,
   },
-  editPrefsText: { color: colors.coral, fontWeight: "900", fontSize: 14 },
+  editPrefsText: { color: colors.coral, fontWeight: '900', fontSize: 14 },
   prefModalSafe: { flex: 1, backgroundColor: colors.backgroundSoft },
   prefModalTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: colors.white,
     borderBottomWidth: 1,
-    borderBottomColor: "#EEF2F7",
+    borderBottomColor: '#EEF2F7',
   },
   prefModalBody: { padding: 16, paddingBottom: 40 },
-  prefSaveText: { color: colors.coral, fontWeight: "900", fontSize: 15 },
-  prefChipWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 4,
-  },
+  prefSaveText: { color: colors.coral, fontWeight: '900', fontSize: 15 },
+  prefChipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   prefChip: {
     backgroundColor: colors.white,
     borderWidth: 1,
-    borderColor: "#E8ECF4",
+    borderColor: '#E8ECF4',
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  prefChipOn: { backgroundColor: "#FFF3F1", borderColor: colors.coral },
-  prefChipText: {
-    color: colors.textMuted,
-    fontWeight: "800",
-    textTransform: "capitalize",
-  },
+  prefChipOn: { backgroundColor: '#FFF3F1', borderColor: colors.coral },
+  prefChipText: { color: colors.textMuted, fontWeight: '800', textTransform: 'capitalize' },
   prefChipTextOn: { color: colors.coral },
-  privacyNoticeCard: {
-    backgroundColor: colors.white,
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: "#E8ECF4",
-    gap: 8,
-  },
-  privacyTitle: { fontSize: 18, fontWeight: "900", color: colors.text },
-  privacyText: {
-    fontSize: 13,
-    color: colors.textMuted,
-    lineHeight: 19,
-    fontWeight: "600",
-  },
-  bulletText: {
-    fontSize: 13,
-    color: colors.textMuted,
-    lineHeight: 19,
-    marginBottom: 6,
-    fontWeight: "600",
-  },
+  privacyNoticeCard: { backgroundColor: colors.white, borderRadius: 18, padding: 16, marginBottom: 18, borderWidth: 1, borderColor: '#E8ECF4', gap: 8 },
+  privacyTitle: { fontSize: 18, fontWeight: '900', color: colors.text },
+  privacyText: { fontSize: 13, color: colors.textMuted, lineHeight: 19, fontWeight: '600' },
+  bulletText: { fontSize: 13, color: colors.textMuted, lineHeight: 19, marginBottom: 6, fontWeight: '600' },
   privacyActionsCard: { gap: 10, marginTop: 18 },
-  privacyActionBtn: {
-    backgroundColor: colors.coral,
-    borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  privacyActionText: { color: "#fff", fontWeight: "900" },
-  secondaryActionBtn: {
-    backgroundColor: "#FFF3F1",
-    borderWidth: 1,
-    borderColor: colors.coral,
-  },
-  secondaryActionText: { color: colors.coral, fontWeight: "900" },
-  dangerActionBtn: { backgroundColor: "#B91C1C" },
+  privacyActionBtn: { backgroundColor: colors.coral, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  privacyActionText: { color: '#fff', fontWeight: '900' },
+  secondaryActionBtn: { backgroundColor: '#FFF3F1', borderWidth: 1, borderColor: colors.coral },
+  secondaryActionText: { color: colors.coral, fontWeight: '900' },
+  dangerActionBtn: { backgroundColor: '#B91C1C' },
   prefToggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: colors.white,
     borderRadius: 16,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: "#E8ECF4",
+    borderColor: '#E8ECF4',
   },
 
   signOutBtn: {

@@ -12,18 +12,17 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { ApiError, apiFetch } from "../api/client";
-import { checkSafetyText } from "../api/safety";
-import { getUserPreferences } from "../api/user";
-import { scheduleJournalEntryReminder } from "../lib/notifications";
-import { colors } from "../theme/colors";
-import { useAuth } from "../context/AuthContext";
-import { languageLocales, useTranslation } from "../i18n/I18nContext";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { HomeStackParamList } from "../navigation/types";
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { ApiError, apiFetch } from '../api/client';
+import { checkSafetyText } from '../api/safety';
+import { getUserPreferences } from '../api/user';
+import { scheduleJournalEntryReminder } from '../lib/notifications';
+import { colors } from '../theme/colors';
+import { useAuth } from '../context/AuthContext';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { HomeStackParamList } from '../navigation/types';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type JournalEntry = {
@@ -301,13 +300,11 @@ function NewEntryModal({
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [moodScore, setMoodScore] = useState(5);
-  const [tagsRaw, setTagsRaw] = useState("");
+  const [tagsRaw, setTagsRaw] = useState('');
   const [isPrivate, setIsPrivate] = useState(defaultPrivate);
-  const [pushNotificationEnabled, setPushNotificationEnabled] = useState(
-    Boolean(initialNotificationEnabled),
-  );
-  const [notificationTitle, setNotificationTitle] = useState("");
-  const [notificationTime, setNotificationTime] = useState("20:00");
+  const [pushNotificationEnabled, setPushNotificationEnabled] = useState(Boolean(initialNotificationEnabled));
+  const [notificationTitle, setNotificationTitle] = useState('');
+  const [notificationTime, setNotificationTime] = useState('20:00');
   const [timePickerVisible, setTimePickerVisible] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -315,7 +312,7 @@ function NewEntryModal({
     setTitle("");
     setContent("");
     setMoodScore(5);
-    setTagsRaw("");
+    setTagsRaw('');
     setIsPrivate(defaultPrivate);
     setPushNotificationEnabled(Boolean(initialNotificationEnabled));
     setNotificationTitle("");
@@ -1076,9 +1073,7 @@ export function AIDiaryScreen({ route, navigation }: Props) {
       ]);
       setEntries(data);
       if (preferences) {
-        setDefaultPrivate(
-          preferences.privacy_preferences.journal_private_default,
-        );
+        setDefaultPrivate(preferences.privacy_preferences.journal_private_default);
       }
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {

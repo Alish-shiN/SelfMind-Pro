@@ -25,19 +25,18 @@ import {
   WeeklyGoalSummary,
 } from "../api/goals";
 import { colors } from "../theme/colors";
-import { useTranslation } from "../i18n/I18nContext";
 
-const starterGoalTemplates = [
+const starterGoals = [
   {
-    titleKey: "reflect3Times",
-    descriptionKey: "reflect3TimesDesc",
+    title: "Reflect 3 times",
+    description: "Write three journal entries this week.",
     goal_type: "reflection" as const,
     target_count: 3,
     period: "weekly" as const,
   },
   {
-    titleKey: "trackMood5Times",
-    descriptionKey: "trackMood5TimesDesc",
+    title: "Track mood 5 times",
+    description: "Log mood with your journal entries five times this week.",
     goal_type: "mood_tracking" as const,
     target_count: 5,
     period: "weekly" as const,
@@ -45,7 +44,6 @@ const starterGoalTemplates = [
 ];
 
 export function GoalsScreen() {
-  const { t } = useTranslation();
   const [progress, setProgress] = useState<GoalProgress[]>([]);
   const [summary, setSummary] = useState<WeeklyGoalSummary | null>(null);
   const [templates, setTemplates] = useState<GoalTemplate[]>([]);
@@ -66,7 +64,7 @@ export function GoalsScreen() {
       setSummary(s);
       setTemplates(t);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : t("couldNotLoadGoals"));
+      setError(e instanceof ApiError ? e.message : "Could not load goals.");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -82,11 +80,11 @@ export function GoalsScreen() {
     try {
       await action();
       await load();
-      Alert.alert(t("goalsTitle"), success);
+      Alert.alert("Goals", success);
     } catch (e) {
       Alert.alert(
-        t("goalError"),
-        e instanceof ApiError ? e.message : t("couldNotUpdateGoals"),
+        "Goal error",
+        e instanceof ApiError ? e.message : "Could not update goals.",
       );
     } finally {
       setSaving(false);
@@ -104,15 +102,15 @@ export function GoalsScreen() {
           period: template.period,
           template_key: template.key,
         }),
-      t("goalAdded"),
+      "Goal added.",
     );
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.kicker}>{t("selfImprovement")}</Text>
-          <Text style={styles.title}>{t("goalsTitle")}</Text>
+          <Text style={styles.kicker}>Self-improvement</Text>
+          <Text style={styles.title}>Goals</Text>
         </View>
         {saving ? (
           <ActivityIndicator color={colors.coral} />
@@ -141,27 +139,29 @@ export function GoalsScreen() {
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           <View style={styles.summaryCard}>
-            <Text style={styles.sectionTitle}>{t("weeklySummary")}</Text>
+            <Text style={styles.sectionTitle}>Weekly summary</Text>
             <Text style={styles.percent}>
               {summary?.overall_completion_percentage ?? 0}%
             </Text>
             <Text style={styles.message}>
-              {summary?.supportive_message ?? t("chooseSmallGoal")}
+              {summary?.supportive_message ?? "Choose one small goal to begin."}
             </Text>
             <Text style={styles.meta}>
-              {t("completed")} {summary?.completed_goals ?? 0} • {t("partial")}{" "}
-              {summary?.partially_completed_goals ?? 0} • {t("missed")}{" "}
+              Completed {summary?.completed_goals ?? 0} • Partial{" "}
+              {summary?.partially_completed_goals ?? 0} • Missed{" "}
               {summary?.missed_goals ?? 0}
             </Text>
           </View>
 
-          <Text style={styles.sectionTitle}>{t("activeGoals")}</Text>
+          <Text style={styles.sectionTitle}>Active goals</Text>
           {progress.length ? (
             progress.map((item) => (
               <View style={styles.card} key={item.goal.id}>
                 <View style={styles.rowBetween}>
                   <Text style={styles.goalTitle}>{item.goal.title}</Text>
-                  <Text style={styles.goalType}>{t(item.goal.goal_type)}</Text>
+                  <Text style={styles.goalType}>
+                    {item.goal.goal_type.replace("_", " ")}
+                  </Text>
                 </View>
                 <Text style={styles.description}>{item.goal.description}</Text>
                 <View style={styles.progressTrack}>
@@ -185,12 +185,12 @@ export function GoalsScreen() {
                       onPress={() =>
                         run(
                           () => completeGoal(item.goal.id),
-                          t("completionAdded"),
+                          "Completion added.",
                         )
                       }
                       disabled={saving}
                     >
-                      <Text style={styles.smallBtnText}>{t("markDone")}</Text>
+                      <Text style={styles.smallBtnText}>Mark done</Text>
                     </Pressable>
                   ) : null}
                   <Pressable
@@ -198,55 +198,45 @@ export function GoalsScreen() {
                     onPress={() =>
                       run(
                         () => updateGoal(item.goal.id, { is_active: false }),
-                        t("goalPaused"),
+                        "Goal paused.",
                       )
                     }
                     disabled={saving}
                   >
-                    <Text style={styles.smallBtnLightText}>{t("pause")}</Text>
+                    <Text style={styles.smallBtnLightText}>Pause</Text>
                   </Pressable>
                   <Pressable
                     style={styles.smallBtnDanger}
                     onPress={() =>
-                      run(() => deleteGoal(item.goal.id), t("goalDeleted"))
+                      run(() => deleteGoal(item.goal.id), "Goal deleted.")
                     }
                     disabled={saving}
                   >
-                    <Text style={styles.smallBtnText}>{t("delete")}</Text>
+                    <Text style={styles.smallBtnText}>Delete</Text>
                   </Pressable>
                 </View>
               </View>
             ))
           ) : (
-            <Text style={styles.empty}>{t("noActiveGoals")}</Text>
+            <Text style={styles.empty}>
+              No active goals yet. Start with a small supportive goal below.
+            </Text>
           )}
 
-          <Text style={styles.sectionTitle}>{t("quickGoals")}</Text>
-          {starterGoalTemplates.map((goal) => (
+          <Text style={styles.sectionTitle}>Quick goals</Text>
+          {starterGoals.map((goal) => (
             <Pressable
-              key={goal.titleKey}
+              key={goal.title}
               style={styles.template}
-              onPress={() =>
-                run(
-                  () =>
-                    createGoal({
-                      title: t(goal.titleKey),
-                      description: t(goal.descriptionKey),
-                      goal_type: goal.goal_type,
-                      target_count: goal.target_count,
-                      period: goal.period,
-                    }),
-                  t("goalAdded"),
-                )
-              }
+              onPress={() => run(() => createGoal(goal), "Goal added.")}
               disabled={saving}
             >
-              <Text style={styles.templateTitle}>{t(goal.titleKey)}</Text>
-              <Text style={styles.description}>{t(goal.descriptionKey)}</Text>
+              <Text style={styles.templateTitle}>{goal.title}</Text>
+              <Text style={styles.description}>{goal.description}</Text>
             </Pressable>
           ))}
 
-          <Text style={styles.sectionTitle}>{t("selfCareTemplates")}</Text>
+          <Text style={styles.sectionTitle}>Self-care templates</Text>
           <View style={styles.templateGrid}>
             {templates.map((template) => (
               <Pressable
