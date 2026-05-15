@@ -1,16 +1,14 @@
 services:
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-002686}
-      POSTGRES_DB: ${POSTGRES_DB:-selfmind_db}
+  redis:
+    image: redis:7-alpine
+    container_name: selfmind_redis
     ports:
-      - "5432:5432"
+      - "6379:6379"
     volumes:
-      - selfmind_pg:/var/lib/postgresql/data
+      - selfmind_redis:/data
+    command: ["redis-server", "--appendonly", "yes"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -18,17 +16,18 @@ services:
   api:
     build:
       context: ./backend
+      dockerfile: Dockerfile
+    container_name: selfmind_api
     env_file:
       - ./backend/.env
     environment:
-      # Ensure docker-compose DB host overrides any local .env defaults
-      POSTGRES_SERVER: db
+      REDIS_URL: redis://redis:6379/0
     depends_on:
-      db:
+      redis:
         condition: service_healthy
     ports:
       - "8000:8000"
+    restart: unless-stopped
 
 volumes:
-  selfmind_pg:
-
+  selfmind_redis:
