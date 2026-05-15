@@ -227,6 +227,7 @@ export function AppNavigator() {
           <>
             <RootStack.Screen name="MainTabs" component={MainTabsNavigator} />
             <RootStack.Screen name="Profile" component={ProfileScreen} />
+            <RootStack.Screen name="ArchiveSearch" component={ArchiveSearchScreen} />
           </>
         ) : !onboardingDone ? (
           <RootStack.Screen name="Onboarding">

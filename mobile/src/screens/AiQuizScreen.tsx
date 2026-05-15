@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -42,6 +42,8 @@ function titleCase(value?: string | null) {
 
 export function AiQuizScreen({ navigation }: Props) {
   const { signOut } = useAuth();
+  const { t, language } = useTranslation();
+  const locale = languageLocales[language as keyof typeof languageLocales];
 
   const [mode, setMode] = useState<ScreenMode>('landing');
   const [loadingLanding, setLoadingLanding] = useState(true);
@@ -198,7 +200,7 @@ export function AiQuizScreen({ navigation }: Props) {
   }, []);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
       <View style={styles.topRow}>
         <Pressable onPress={() => (mode === 'landing' ? navigation.goBack() : goToLanding())} hitSlop={12}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
@@ -320,7 +322,8 @@ export function AiQuizScreen({ navigation }: Props) {
                 <Text style={styles.questionText}>{q.question_text}</Text>
                 <View style={styles.optionsCol}>
                   {(q.options || []).map((opt, idx) => {
-                    const picked = answers[q.question_index]?.answer_text === opt;
+                    const picked =
+                      answers[q.question_index]?.answer_text === opt;
                     return (
                       <Pressable
                         key={`${q.question_index}-${opt}-${idx}`}
