@@ -29,6 +29,19 @@ const MOOD_EMOJI: Record<string, string> = {
 };
 
 const PERIOD_OPTIONS = ["7d", "30d", "90d"] as const;
+const QUIZ_TYPE_ALIASES: Record<string, string> = {
+  stress_reflection: "stress",
+};
+
+function normalizeQuizType(value?: string | null) {
+  const key = (value || "stress").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return QUIZ_TYPE_ALIASES[key] ?? key;
+}
+
+function translatedQuizTitle(value: string | null | undefined, t: (key: string) => string) {
+  return t(`quizType_${normalizeQuizType(value)}_title`);
+}
+
 type AnalyticsPeriod = (typeof PERIOD_OPTIONS)[number];
 type AnalyticsGranularity = "day" | "week" | "month";
 
@@ -154,6 +167,51 @@ function translatedInsightTitle(value: string, t: (key: string) => string) {
     default:
       return value;
   }
+}
+
+
+function translatedInsightDescription(
+  insight: MoodAnalytics["insights"][number],
+  t: (key: string, params?: Record<string, string | number>) => string,
+) {
+  const title = normalizeLabel(insight.title);
+  const description = insight.description || "";
+  if (title === "mood_baseline") {
+    if (description.includes("strong range")) return t("dashboardInsightMoodStrong");
+    if (description.includes("moderate")) return t("dashboardInsightMoodModerate");
+    return t("dashboardInsightMoodLow");
+  }
+  if (title === "mood_trend") {
+    if (description.includes("improved")) return t("dashboardInsightTrendImproved");
+    if (description.includes("declined")) return t("dashboardInsightTrendDeclined");
+    return t("dashboardInsightTrendStable");
+  }
+  if (title === "top_emotion") {
+    const match = description.match(/(.+) is the most frequent detected emotion, appearing in (\d+)%/);
+    if (match) {
+      return t("dashboardInsightTopEmotion", {
+        emotion: translatedEmotionLabel(match[1], t),
+        percent: match[2],
+      });
+    }
+  }
+  if (title === "journaling_consistency") {
+    const match = description.match(/You journaled on (\d+) of (\d+) days \((\d+)% consistency\)/);
+    if (match) {
+      return t("dashboardInsightConsistency", {
+        active: match[1],
+        total: match[2],
+        percent: match[3],
+      });
+    }
+  }
+  if (title === "mood_vs_journaling_frequency") {
+    return t("dashboardCorrelationJournalingDesc");
+  }
+  if (title === "mood_vs_quiz_severity") {
+    return t("dashboardCorrelationQuizDesc");
+  }
+  return description;
 }
 
 function translatedCorrelationStrength(value: string, t: (key: string) => string) {
@@ -599,13 +657,13 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
                 {t("latestQuizActionPlan")}
               </Text>
               <Text style={styles.sectionHint}>
-                {data.latest_quiz_action_plan.quiz_title}
+                {translatedQuizTitle(data.latest_quiz_action_plan.quiz_type, t)}
               </Text>
             </View>
             <View style={styles.quizPlanCard}>
               <View style={styles.quizPlanTop}>
                 <Text style={styles.quizPlanTitle}>
-                  {data.latest_quiz_action_plan.quiz_title}
+                  {translatedQuizTitle(data.latest_quiz_action_plan.quiz_type, t)}
                 </Text>
                 <Text style={styles.quizPlanScore}>
                   {Math.round(data.latest_quiz_action_plan.score)}
@@ -760,7 +818,7 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
                       {translatedInsightTitle(insight.title, t)}
                     </Text>
                     <Text style={styles.insightBulletText}>
-                      {insight.description}
+                      {translatedInsightDescription(insight, t)}
                     </Text>
                   </View>
                 </View>

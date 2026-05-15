@@ -152,7 +152,7 @@ export function AiQuizScreen({ navigation }: Props) {
       setResult(null);
       setAnswers({});
       try {
-        const generated = await generateAiQuiz(typeToStart);
+        const generated = await generateAiQuiz(typeToStart, language);
         setSession(generated);
         setSelectedQuizType(generated.quiz_type);
         setMode("taking");
@@ -162,7 +162,7 @@ export function AiQuizScreen({ navigation }: Props) {
         setGenerating(false);
       }
     },
-    [handleAuthError, quizTypes, selectedQuizType],
+    [handleAuthError, language, quizTypes, selectedQuizType],
   );
 
   const submit = useCallback(async () => {
@@ -183,7 +183,7 @@ export function AiQuizScreen({ navigation }: Props) {
           score: answer.score,
         };
       });
-      const submitted = await submitAiQuiz(session.id, payloadAnswers);
+      const submitted = await submitAiQuiz(session.id, payloadAnswers, language);
       setResult(submitted);
       setMode("result");
       await loadLanding();
@@ -192,7 +192,7 @@ export function AiQuizScreen({ navigation }: Props) {
     } finally {
       setSubmitting(false);
     }
-  }, [answers, handleAuthError, loadLanding, questions, session]);
+  }, [answers, handleAuthError, language, loadLanding, questions, session]);
 
   const viewResult = useCallback(
     async (resultId: number) => {
