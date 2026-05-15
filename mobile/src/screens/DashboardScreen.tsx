@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  Alert,
   ActivityIndicator,
   Pressable,
   RefreshControl,
@@ -17,6 +16,7 @@ import { ApiError } from "../api/client";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { languageLocales, useTranslation } from "../i18n/I18nContext";
+import { setAchievementWeeklyMoodReview } from "../lib/storage";
 
 const MOOD_EMOJI: Record<string, string> = {
   joy: "😊",
@@ -29,8 +29,31 @@ const MOOD_EMOJI: Record<string, string> = {
 };
 
 const PERIOD_OPTIONS = ["7d", "30d", "90d"] as const;
-const GRANULARITY_OPTIONS = ["day", "week", "month"] as const;
+type AnalyticsPeriod = (typeof PERIOD_OPTIONS)[number];
+type AnalyticsGranularity = "day" | "week" | "month";
 
+const EMOTION_LABEL_KEYS: Record<string, string> = {
+  joy: "emotionJoy",
+  happy: "emotionJoy",
+  happiness: "emotionJoy",
+  calm: "emotionCalm",
+  stress: "emotionStress",
+  stressed: "emotionStress",
+  anxiety: "emotionAnxiety",
+  anxious: "emotionAnxiety",
+  sadness: "emotionSadness",
+  sad: "emotionSadness",
+  anger: "emotionAnger",
+  angry: "emotionAnger",
+  neutral: "emotionNeutral",
+};
+
+const SENTIMENT_LABEL_KEYS: Record<string, string> = {
+  positive: "sentimentPositive",
+  neutral: "sentimentNeutral",
+  negative: "sentimentNegative",
+  mixed: "sentimentMixed",
+};
 function moodColor(score: number | null) {
   if (score == null) return "#E5E7EB";
   if (score >= 7) return "#34A853";
@@ -54,6 +77,99 @@ function emotionColor(emotion: string | null) {
       return "#FCA5A5";
     default:
       return "#E5E7EB";
+  }
+}
+
+function normalizeLabel(value?: string | null) {
+  return (value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+}
+
+function translatedEmotionLabel(value: string | null | undefined, t: (key: string) => string) {
+  const normalized = normalizeLabel(value);
+  const key = EMOTION_LABEL_KEYS[normalized];
+  return key ? t(key) : value || t("emotionNeutral");
+}
+
+function translatedSentimentLabel(value: string | null | undefined, t: (key: string) => string) {
+  const normalized = normalizeLabel(value);
+  const key = SENTIMENT_LABEL_KEYS[normalized];
+  return key ? t(key) : value || t("sentimentNeutral");
+}
+
+function granularityForPeriod(period: AnalyticsPeriod): AnalyticsGranularity {
+  if (period === "7d") return "day";
+  if (period === "30d") return "week";
+  return "month";
+}
+
+function periodLabel(period: AnalyticsPeriod, t: (key: string) => string) {
+  if (period === "7d") return t("last7Days");
+  if (period === "30d") return t("last30Days");
+  return t("last90Days");
+}
+
+function parseDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+}
+
+function formatShortDate(value: string, locale: string, options?: Intl.DateTimeFormatOptions) {
+  return parseDate(value).toLocaleDateString(
+    locale,
+    options ?? { month: "short", day: "numeric" },
+  );
+}
+
+function formatTrendLabel(
+  point: MoodAnalytics["mood_history"][number],
+  granularity: AnalyticsGranularity,
+  locale: string,
+) {
+  if (granularity === "month") {
+    return formatShortDate(point.period_start, locale, { month: "short" });
+  }
+  if (granularity === "week") {
+    return `${formatShortDate(point.period_start, locale)}–${formatShortDate(
+      point.period_end,
+      locale,
+    )}`;
+  }
+  return formatShortDate(point.period_start, locale);
+}
+
+function translatedInsightTitle(value: string, t: (key: string) => string) {
+  switch (normalizeLabel(value)) {
+    case "mood_baseline":
+      return t("moodBaselineInsight");
+    case "mood_trend":
+      return t("moodTrendInsight");
+    case "top_emotion":
+      return t("topEmotionInsight");
+    case "journaling_consistency":
+      return t("journalingConsistencyInsight");
+    case "mood_vs_journaling_frequency":
+      return t("moodVsJournalingFrequency");
+    case "mood_vs_quiz_severity":
+      return t("moodVsQuizSeverity");
+    default:
+      return value;
+  }
+}
+
+function translatedCorrelationStrength(value: string, t: (key: string) => string) {
+  switch (normalizeLabel(value)) {
+    case "strong":
+      return t("correlationStrong");
+    case "moderate":
+      return t("correlationModerate");
+    case "weak":
+      return t("correlationWeak");
+    case "minimal":
+      return t("correlationMinimal");
+    case "insufficient_data":
+      return t("correlationInsufficientData");
+    default:
+      return value;
   }
 }
 
@@ -90,7 +206,15 @@ function MoodBar({ score }: { score: number }) {
   );
 }
 
-function MoodTrendChart({ points }: { points: MoodAnalytics["mood_history"] }) {
+function DashboardMoodTrendChart({
+  points,
+  granularity,
+  locale,
+}: {
+  points: MoodAnalytics["mood_history"];
+  granularity: AnalyticsGranularity;
+  locale: string;
+}) {
   const visible = points.slice(-12);
   const maxMood = 10;
   return (
@@ -113,8 +237,8 @@ function MoodTrendChart({ points }: { points: MoodAnalytics["mood_history"] }) {
                 ]}
               />
             </View>
-            <Text style={styles.trendLabel} numberOfLines={1}>
-              {point.label}
+            <Text style={styles.trendLabel} numberOfLines={2}>
+              {formatTrendLabel(point, granularity, locale)}
             </Text>
           </View>
         );
@@ -123,66 +247,44 @@ function MoodTrendChart({ points }: { points: MoodAnalytics["mood_history"] }) {
   );
 }
 
-function MiniHeatmap({ days }: { days: MoodAnalytics["emotion_heatmap"] }) {
-  return (
-    <View style={styles.heatmapGrid}>
-      {days.slice(-35).map((day) => (
-        <View
-          key={day.date}
-          style={[
-            styles.heatmapCell,
-            {
-              backgroundColor: emotionColor(day.dominant_emotion),
-              opacity:
-                day.entries_count > 0 ? Math.max(0.35, day.intensity) : 0.25,
-            },
-          ]}
-        />
-      ))}
-    </View>
-  );
-}
+function DashboardMiniHeatmap({
+  days,
+  locale,
+}: {
+  days: MoodAnalytics["emotion_heatmap"];
+  locale: string;
+}) {
+  const visible = days.slice(-35);
+  const first = visible[0];
+  const last = visible[visible.length - 1];
 
-function MoodTrendChart({ points }: { points: MoodAnalytics['mood_history'] }) {
-  const visible = points.slice(-12);
-  const maxMood = 10;
   return (
-    <View style={styles.trendChart}>
-      {visible.map((point) => {
-        const height = point.average_mood == null ? 8 : Math.max(8, (point.average_mood / maxMood) * 92);
-        return (
-          <View key={point.period_start} style={styles.trendItem}>
-            <View style={styles.trendBarTrack}>
-              <View
-                style={[
-                  styles.trendBarFill,
-                  { height: `${height}%` as any, backgroundColor: moodColor(point.average_mood) },
-                ]}
-              />
-            </View>
-            <Text style={styles.trendLabel} numberOfLines={1}>{point.label}</Text>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function MiniHeatmap({ days }: { days: MoodAnalytics['emotion_heatmap'] }) {
-  return (
-    <View style={styles.heatmapGrid}>
-      {days.slice(-35).map((day) => (
-        <View
-          key={day.date}
-          style={[
-            styles.heatmapCell,
-            {
-              backgroundColor: emotionColor(day.dominant_emotion),
-              opacity: day.entries_count > 0 ? Math.max(0.35, day.intensity) : 0.25,
-            },
-          ]}
-        />
-      ))}
+    <View>
+      <View style={styles.heatmapGrid}>
+        {visible.map((day) => (
+          <View
+            key={day.date}
+            style={[
+              styles.heatmapCell,
+              {
+                backgroundColor: emotionColor(day.dominant_emotion),
+                opacity:
+                  day.entries_count > 0 ? Math.max(0.35, day.intensity) : 0.25,
+              },
+            ]}
+          />
+        ))}
+      </View>
+      {first && last ? (
+        <View style={styles.heatmapRangeRow}>
+          <Text style={styles.heatmapRangeText}>
+            {formatShortDate(first.date, locale)}
+          </Text>
+          <Text style={styles.heatmapRangeText}>
+            {formatShortDate(last.date, locale)}
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -197,16 +299,14 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
   const [data, setData] = useState<DashboardHome | null>(null);
   const [analytics, setAnalytics] = useState<MoodAnalytics | null>(null);
   const [analyticsPeriod, setAnalyticsPeriod] =
-    useState<(typeof PERIOD_OPTIONS)[number]>("30d");
-  const [analyticsGranularity, setAnalyticsGranularity] =
-    useState<(typeof GRANULARITY_OPTIONS)[number]>("day");
+    useState<AnalyticsPeriod>("30d");
+  const analyticsGranularity = granularityForPeriod(analyticsPeriod);
 
   const [monthCursor, setMonthCursor] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
-  const [actionMode, setActionMode] = useState<"note" | "notifier">("note");
 
   const monthDays = (() => {
     const year = monthCursor.getFullYear();
@@ -237,9 +337,10 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
       ]);
       setData(d);
       setAnalytics(moodAnalytics);
+      void setAchievementWeeklyMoodReview();
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
-        await signOut();
+        await signOut("sessionExpired");
         setError(null);
         return;
       }
@@ -281,9 +382,7 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
 
   const analysis = data?.latest_analysis;
   const stats = data?.stats;
-  const emojiKey = (
-    analysis?.emotion_label || ""
-  ).toLowerCase() as keyof typeof MOOD_EMOJI;
+  const emojiKey = normalizeLabel(analysis?.emotion_label) as keyof typeof MOOD_EMOJI;
   const emoji = MOOD_EMOJI[emojiKey] || "😐";
 
   return (
@@ -330,14 +429,13 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
             <Text style={styles.moodCardLabel}>{t("currentMood")}</Text>
             <Text style={styles.moodCardEmotion}>
               {analysis
-                ? analysis.emotion_label.charAt(0).toUpperCase() +
-                  analysis.emotion_label.slice(1)
+                ? translatedEmotionLabel(analysis.emotion_label, t)
                 : t("noDataYet")}
             </Text>
             {analysis && (
               <View style={styles.sentimentPill}>
                 <Text style={styles.sentimentText}>
-                  {analysis.sentiment_label}
+                  {translatedSentimentLabel(analysis.sentiment_label, t)}
                 </Text>
               </View>
             )}
@@ -438,41 +536,6 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
             })}
           </View>
 
-          <View style={styles.calModeRow}>
-            <Pressable
-              style={[
-                styles.calModeBtn,
-                actionMode === "note" && styles.calModeBtnOn,
-              ]}
-              onPress={() => setActionMode("note")}
-            >
-              <Text
-                style={[
-                  styles.calModeText,
-                  actionMode === "note" && styles.calModeTextOn,
-                ]}
-              >
-                {t("note")}
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.calModeBtn,
-                actionMode === "notifier" && styles.calModeBtnOn,
-              ]}
-              onPress={() => setActionMode("notifier")}
-            >
-              <Text
-                style={[
-                  styles.calModeText,
-                  actionMode === "notifier" && styles.calModeTextOn,
-                ]}
-              >
-                {t("notifier")}
-              </Text>
-            </Pressable>
-          </View>
-
           <Text style={styles.calSelectedText}>
             {t("selected")}:{" "}
             {selectedDate.toLocaleDateString(locale, {
@@ -492,20 +555,14 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
                 2,
                 "0",
               )}-${String(selectedDate.getDate()).padStart(2, "0")}`;
-              const notificationEnabled = actionMode === "notifier";
-
               // Navigate into HomeStack (AiDiary) from the nested tab navigator.
               navigation.navigate("Home", {
                 screen: "AiDiary",
-                params: { entryDate, notificationEnabled },
+                params: { entryDate },
               });
             }}
           >
-            <Text style={styles.calActionText}>
-              {actionMode === "note"
-                ? t("createNoteForDay")
-                : t("setNotifierForDay")}
-            </Text>
+            <Text style={styles.calActionText}>{t("createNoteForDay")}</Text>
           </Pressable>
         </View>
 
@@ -535,59 +592,59 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
           />
         </View>
 
-        <View style={styles.section}>
-          <View style={styles.archiveCard}>
-            <View style={styles.archiveIcon}>
-              <Ionicons name="search-outline" size={20} color={colors.coral} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.archiveTitle}>{t("searchHistory")}</Text>
-              <Text style={styles.archiveSubtitle}>
-                {t("searchHistorySubtitle")}
-              </Text>
-            </View>
-            <Pressable
-              style={styles.archiveButton}
-              onPress={() => navigation.navigate("ArchiveSearch")}
-            >
-              <Text style={styles.archiveButtonText}>{t("openArchive")}</Text>
-            </Pressable>
-          </View>
-        </View>
-
         {data?.latest_quiz_action_plan ? (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Latest Quiz Action Plan</Text>
-              <Text style={styles.sectionHint}>{data.latest_quiz_action_plan.quiz_title}</Text>
+              <Text style={styles.sectionTitle}>
+                {t("latestQuizActionPlan")}
+              </Text>
+              <Text style={styles.sectionHint}>
+                {data.latest_quiz_action_plan.quiz_title}
+              </Text>
             </View>
             <View style={styles.quizPlanCard}>
               <View style={styles.quizPlanTop}>
-                <Text style={styles.quizPlanTitle}>{data.latest_quiz_action_plan.quiz_title}</Text>
-                <Text style={styles.quizPlanScore}>{Math.round(data.latest_quiz_action_plan.score)}</Text>
+                <Text style={styles.quizPlanTitle}>
+                  {data.latest_quiz_action_plan.quiz_title}
+                </Text>
+                <Text style={styles.quizPlanScore}>
+                  {Math.round(data.latest_quiz_action_plan.score)}
+                </Text>
               </View>
               <Text style={styles.quizPlanMeta}>
-                {new Date(data.latest_quiz_action_plan.created_at).toLocaleDateString()} • {data.latest_quiz_action_plan.severity_level}
+                {new Date(
+                  data.latest_quiz_action_plan.created_at,
+                ).toLocaleDateString()}{" "}
+                • {data.latest_quiz_action_plan.severity_level}
               </Text>
               <Text style={styles.quizPlanSummary} numberOfLines={3}>
                 {data.latest_quiz_action_plan.summary}
               </Text>
-              {data.latest_quiz_action_plan.next_actions.slice(0, 3).map((action) => (
-                <View key={action} style={styles.quizPlanActionRow}>
-                  <Ionicons name="checkmark-circle-outline" size={15} color={colors.coral} />
-                  <Text style={styles.quizPlanAction}>{action}</Text>
-                </View>
-              ))}
+              {data.latest_quiz_action_plan.next_actions
+                .slice(0, 3)
+                .map((action) => (
+                  <View key={action} style={styles.quizPlanActionRow}>
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={15}
+                      color={colors.coral}
+                    />
+                    <Text style={styles.quizPlanAction}>{action}</Text>
+                  </View>
+                ))}
               <Pressable
                 style={styles.quizPlanButton}
-                onPress={() => navigation.navigate('Home', { screen: 'AiQuiz' })}
+                onPress={() =>
+                  navigation.navigate("Home", { screen: "AiQuiz" })
+                }
               >
-                <Text style={styles.quizPlanButtonText}>View result or retake quiz</Text>
+                <Text style={styles.quizPlanButtonText}>
+                  {t("viewResultOrRetakeQuiz")}
+                </Text>
               </Pressable>
             </View>
           </View>
         ) : null}
-
 
         {/* Mood analytics */}
         {analytics ? (
@@ -615,36 +672,18 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
                       analyticsPeriod === period && styles.filterChipTextOn,
                     ]}
                   >
-                    {period}
+                    {periodLabel(period, t)}
                   </Text>
                 </Pressable>
               ))}
             </View>
-            <View style={styles.filterRow}>
-              {GRANULARITY_OPTIONS.map((item) => (
-                <Pressable
-                  key={item}
-                  style={[
-                    styles.filterChip,
-                    analyticsGranularity === item && styles.filterChipOn,
-                  ]}
-                  onPress={() => setAnalyticsGranularity(item)}
-                >
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      analyticsGranularity === item && styles.filterChipTextOn,
-                    ]}
-                  >
-                    {item}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
             <View style={styles.analyticsCard}>
               <Text style={styles.analyticsTitle}>{t("moodOverTime")}</Text>
-              <MoodTrendChart points={analytics.mood_history} />
+              <DashboardMoodTrendChart
+                points={analytics.mood_history}
+                granularity={analyticsGranularity}
+                locale={locale}
+              />
             </View>
 
             <View style={styles.analyticsMiniGrid}>
@@ -679,8 +718,8 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
                 {analytics.top_emotions.map((emotion) => (
                   <View key={emotion.emotion_label} style={styles.emotionRow}>
                     <Text style={styles.emotionName}>
-                      {MOOD_EMOJI[emotion.emotion_label] ?? "✨"}{" "}
-                      {emotion.emotion_label}
+                      {MOOD_EMOJI[normalizeLabel(emotion.emotion_label)] ?? "✨"}{" "}
+                      {translatedEmotionLabel(emotion.emotion_label, t)}
                     </Text>
                     <View style={styles.emotionBarTrack}>
                       <View
@@ -698,7 +737,10 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
 
             <View style={styles.analyticsCard}>
               <Text style={styles.analyticsTitle}>{t("emotionHeatmap")}</Text>
-              <MiniHeatmap days={analytics.emotion_heatmap} />
+              <DashboardMiniHeatmap
+                days={analytics.emotion_heatmap}
+                locale={locale}
+              />
               <Text style={styles.analyticsCaption}>{t("heatmapCaption")}</Text>
             </View>
 
@@ -715,7 +757,7 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
                   />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.insightBulletTitle}>
-                      {insight.title}
+                      {translatedInsightTitle(insight.title, t)}
                     </Text>
                     <Text style={styles.insightBulletText}>
                       {insight.description}
@@ -725,8 +767,8 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
               ))}
               {analytics.correlations.map((correlation) => (
                 <Text key={correlation.metric} style={styles.correlationText}>
-                  {correlation.metric.replace(/_/g, " ")}:{" "}
-                  {correlation.strength}
+                  {translatedInsightTitle(correlation.metric, t)}: {" "}
+                  {translatedCorrelationStrength(correlation.strength, t)}
                   {correlation.coefficient != null
                     ? ` (${correlation.coefficient})`
                     : ""}
@@ -970,28 +1012,6 @@ const styles = StyleSheet.create({
   calDayText: { fontSize: 12, color: colors.textMuted, fontWeight: "700" },
   calDayTextSelected: { color: colors.white },
 
-  calModeRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  calModeBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: colors.white,
-    borderRadius: 14,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  calModeBtnOn: {
-    backgroundColor: "#FFF0EE",
-    borderColor: colors.coral,
-  },
-  calModeText: { fontSize: 13, fontWeight: "800", color: colors.textMuted },
-  calModeTextOn: { color: colors.coral },
-
   calSelectedText: { fontSize: 13, color: colors.textMuted, marginBottom: 10 },
   calActionBtn: {
     backgroundColor: colors.periwinkle,
@@ -1101,42 +1121,8 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontSize: 12,
     fontWeight: "800",
-    textTransform: "capitalize",
   },
   filterChipTextOn: { color: colors.coral },
-
-  archiveCard: {
-    backgroundColor: colors.white,
-    borderRadius: 20,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#EEF2FF",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  archiveIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#FFF3F1",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  archiveTitle: { fontSize: 15, fontWeight: "900", color: colors.text },
-  archiveSubtitle: {
-    fontSize: 12,
-    color: colors.textMuted,
-    lineHeight: 17,
-    marginTop: 2,
-  },
-  archiveButton: {
-    backgroundColor: colors.coral,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  archiveButtonText: { color: "#fff", fontWeight: "900", fontSize: 11 },
 
   quizPlanCard: {
     backgroundColor: colors.white,
@@ -1195,12 +1181,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   trendChart: {
-    height: 140,
+    height: 150,
     flexDirection: "row",
     alignItems: "flex-end",
-    gap: 6,
+    gap: 5,
   },
-  trendItem: { flex: 1, alignItems: "center", gap: 5 },
+  trendItem: { flex: 1, alignItems: "center", gap: 5, minWidth: 0 },
   trendBarTrack: {
     flex: 1,
     width: "100%",
@@ -1210,7 +1196,14 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   trendBarFill: { width: "100%", borderRadius: 10 },
-  trendLabel: { fontSize: 9, color: colors.textMuted, maxWidth: 44 },
+  trendLabel: {
+    fontSize: 9,
+    color: colors.textMuted,
+    maxWidth: 64,
+    minHeight: 24,
+    textAlign: "center",
+    lineHeight: 11,
+  },
   analyticsMiniGrid: { flexDirection: "row", gap: 8, marginTop: 8 },
   analyticsMiniCard: {
     flex: 1,
@@ -1233,11 +1226,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   emotionName: {
-    width: 84,
+    width: 104,
     fontSize: 12,
     color: colors.text,
     fontWeight: "700",
-    textTransform: "capitalize",
   },
   emotionBarTrack: {
     flex: 1,
@@ -1256,6 +1248,16 @@ const styles = StyleSheet.create({
   },
   heatmapGrid: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
   heatmapCell: { width: 16, height: 16, borderRadius: 5 },
+  heatmapRangeRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  heatmapRangeText: {
+    fontSize: 10,
+    color: colors.textMuted,
+    fontWeight: "700",
+  },
   analyticsCaption: {
     color: colors.textMuted,
     fontSize: 11,
@@ -1282,92 +1284,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textTransform: "capitalize",
   },
-
-
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  sectionHint: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
-  filterRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  filterChipOn: { backgroundColor: '#FFF0EE', borderColor: colors.coral },
-  filterChipText: { color: colors.textMuted, fontSize: 12, fontWeight: '800', textTransform: 'capitalize' },
-  filterChipTextOn: { color: colors.coral },
-
-  quizPlanCard: {
-    backgroundColor: colors.white,
-    borderRadius: 20,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#EEF2FF',
-    gap: 8,
-  },
-  quizPlanTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  quizPlanTitle: { fontSize: 15, fontWeight: '900', color: colors.text },
-  quizPlanScore: { fontSize: 22, fontWeight: '900', color: colors.coral },
-  quizPlanMeta: { fontSize: 11, color: colors.textMuted, fontWeight: '800', textTransform: 'capitalize' },
-  quizPlanSummary: { fontSize: 13, color: colors.text, lineHeight: 18 },
-  quizPlanActionRow: { flexDirection: 'row', gap: 7, alignItems: 'flex-start' },
-  quizPlanAction: { flex: 1, fontSize: 12, color: colors.textMuted, lineHeight: 17, fontWeight: '700' },
-  quizPlanButton: { backgroundColor: colors.coral, borderRadius: 14, paddingVertical: 11, alignItems: 'center', marginTop: 4 },
-  quizPlanButtonText: { color: '#fff', fontWeight: '900', fontSize: 12 },
-
-  analyticsCard: {
-    backgroundColor: colors.white,
-    borderRadius: 20,
-    padding: 14,
-    marginTop: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
-  },
-  analyticsTitle: { fontSize: 14, fontWeight: '800', color: colors.text, marginBottom: 10 },
-  trendChart: { height: 140, flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
-  trendItem: { flex: 1, alignItems: 'center', gap: 5 },
-  trendBarTrack: {
-    flex: 1,
-    width: '100%',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 10,
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
-  },
-  trendBarFill: { width: '100%', borderRadius: 10 },
-  trendLabel: { fontSize: 9, color: colors.textMuted, maxWidth: 44 },
-  analyticsMiniGrid: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  analyticsMiniCard: {
-    flex: 1,
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    padding: 12,
-    alignItems: 'center',
-  },
-  analyticsMiniValue: { fontSize: 16, fontWeight: '900', color: colors.text },
-  analyticsMiniLabel: { fontSize: 10, color: colors.textMuted, textAlign: 'center', marginTop: 2 },
-  emotionRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  emotionName: { width: 84, fontSize: 12, color: colors.text, fontWeight: '700', textTransform: 'capitalize' },
-  emotionBarTrack: { flex: 1, height: 7, borderRadius: 4, overflow: 'hidden', backgroundColor: '#F3F4F6' },
-  emotionBarFill: { height: 7, borderRadius: 4, backgroundColor: colors.coral },
-  emotionPct: { width: 48, fontSize: 11, color: colors.textMuted, textAlign: 'right', fontWeight: '700' },
-  heatmapGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
-  heatmapCell: { width: 16, height: 16, borderRadius: 5 },
-  analyticsCaption: { color: colors.textMuted, fontSize: 11, marginTop: 10, lineHeight: 15 },
-  insightBullet: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginBottom: 10 },
-  insightBulletTitle: { fontSize: 12, color: colors.text, fontWeight: '800' },
-  insightBulletText: { fontSize: 12, color: colors.textMuted, lineHeight: 17, marginTop: 2 },
-  correlationText: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginTop: 4, textTransform: 'capitalize' },
 
   emptyCard: {
     backgroundColor: colors.white,
