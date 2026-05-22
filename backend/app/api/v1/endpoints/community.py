@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, Query, status
+from pathlib import Path
+import shutil
+
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -28,6 +31,8 @@ from app.services.cache_service import (
 from app.services.community_service import CommunityService
 
 router = APIRouter(prefix="/community", tags=["community"])
+BACKEND_ROOT = Path(__file__).resolve().parents[4]
+COMMUNITY_UPLOADS_DIR = BACKEND_ROOT / "uploads" / "community"
 
 
 @router.get("/guidelines", response_model=CommunityGuidelinesResponse)
@@ -40,6 +45,23 @@ def get_guidelines(db: Session = Depends(get_db)):
         response_model=CommunityGuidelinesResponse,
     )
 
+
+
+
+@router.post("/uploads/image")
+def upload_community_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        return {"detail": "Only image files are allowed"}
+    ext = Path(file.filename or "post.jpg").suffix or ".jpg"
+    COMMUNITY_UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"user_{current_user.id}_{abs(hash(file.filename or 'post'))}{ext}"
+    dst = COMMUNITY_UPLOADS_DIR / filename
+    with dst.open("wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    return {"image_url": f"/uploads/community/{filename}"}
 
 @router.post(
     "/posts", response_model=CommunityPostResponse, status_code=status.HTTP_201_CREATED

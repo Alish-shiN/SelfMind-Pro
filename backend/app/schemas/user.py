@@ -30,6 +30,7 @@ class PrivacyPreferences(BaseModel):
     privacy_notice_accepted: bool = False
     privacy_notice_version: str | None = None
     privacy_notice_accepted_at: str | None = None
+    private_account: bool = True
 
 
 class UserPreferencesResponse(BaseModel):

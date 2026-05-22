@@ -1,11 +1,15 @@
+from pathlib import Path
+import shutil
+
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, and_
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
@@ -17,10 +21,13 @@ from app.models.community_reaction import CommunityReaction
 from app.models.community_report import CommunityReport
 from app.models.goal import Goal
 from app.models.goal_completion import GoalCompletion
+from app.models.profile import Profile
 from app.models.journal import JournalEntry
 from app.models.reminder_preference import ReminderPreference
 from app.models.safety_flag import SafetyFlag
 from app.models.user import User
+from app.models.friend_request import FriendRequest
+from app.models.in_app_notification import InAppNotification
 from app.services.cache_service import (
     CacheNamespace,
     CacheTTL,
@@ -36,6 +43,8 @@ from app.schemas.user import (
 )
 
 router = APIRouter(prefix="/users", tags=["users"])
+BACKEND_ROOT = Path(__file__).resolve().parents[4]
+AVATARS_DIR = BACKEND_ROOT / "uploads" / "avatars"
 
 PRIVACY_NOTICE_VERSION = "2026-05-privacy-center-v1"
 DEFAULT_PRIVACY = {
@@ -47,6 +56,7 @@ DEFAULT_PRIVACY = {
     "privacy_notice_accepted": False,
     "privacy_notice_version": None,
     "privacy_notice_accepted_at": None,
+    "private_account": True,
 }
 EXPORT_OPTIONS = [
     {"type": "journal", "label": "Journal history", "formats": ["json"]},
@@ -85,6 +95,48 @@ PRIVACY_NOTICE = {
 }
 
 
+
+
+class AccountInfoResponse(BaseModel):
+    email: str
+    username: str
+    member_since: datetime
+    birthday: date | None = None
+    country: str | None = None
+    bio: str | None = None
+    avatar_url: str | None = None
+
+
+class AccountInfoUpdate(BaseModel):
+    birthday: date | None = None
+    country: str | None = Field(default=None, max_length=100)
+    bio: str | None = Field(default=None, max_length=500)
+
+
+class PublicMiniProfileResponse(BaseModel):
+    id: int
+    username: str
+    avatar_url: str | None = None
+    country: str | None = None
+    bio: str | None = None
+    member_since: datetime
+    private_account: bool = True
+    public_safe_preferences: dict[str, Any] | None = None
+    public_safe_stats: dict[str, Any] | None = None
+    friends_count: int = 0
+
+
+class FriendRequestPayload(BaseModel):
+    target_user_id: int
+
+
+class FriendRequestActionPayload(BaseModel):
+    action: Literal["accepted", "rejected", "cancelled"]
+
+
+class NotificationUpdatePayload(BaseModel):
+    status: Literal["read", "unread"]
+
 class DeleteAccountRequest(BaseModel):
     confirmation: str = Field(..., min_length=6)
 
@@ -98,6 +150,198 @@ def read_current_user(current_user: User = Depends(get_current_user)):
         lambda: UserResponse.model_validate(current_user),
         response_model=UserResponse,
     )
+
+
+
+
+@router.get("/me/account", response_model=AccountInfoResponse)
+def get_my_account_info(current_user: User = Depends(get_current_user)):
+    profile = current_user.profile or Profile(user_id=current_user.id)
+    return {
+        "email": current_user.email,
+        "username": current_user.username,
+        "member_since": current_user.created_at,
+        "birthday": profile.date_of_birth,
+        "country": profile.country,
+        "bio": profile.bio,
+        "avatar_url": profile.avatar_url,
+    }
+
+
+@router.put("/me/account", response_model=AccountInfoResponse)
+def update_my_account_info(payload: AccountInfoUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    profile = current_user.profile
+    if not profile:
+        profile = Profile(user_id=current_user.id)
+        db.add(profile)
+    profile.date_of_birth = payload.birthday
+    profile.country = payload.country.strip() if payload.country else None
+    profile.bio = payload.bio.strip() if payload.bio else None
+    db.commit()
+    db.refresh(current_user)
+    return get_my_account_info(current_user)
+
+
+@router.post("/me/avatar", response_model=AccountInfoResponse)
+def upload_my_avatar(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image files are allowed")
+    ext = Path(file.filename or "avatar.jpg").suffix or ".jpg"
+    AVATARS_DIR.mkdir(parents=True, exist_ok=True)
+    dst = AVATARS_DIR / f"user_{current_user.id}{ext}"
+    with dst.open("wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    profile = current_user.profile
+    if not profile:
+        profile = Profile(user_id=current_user.id)
+        db.add(profile)
+    profile.avatar_url = f"/uploads/avatars/{dst.name}"
+    db.commit()
+    db.refresh(current_user)
+    return get_my_account_info(current_user)
+
+
+@router.get("/public-profile/{user_id}", response_model=PublicMiniProfileResponse)
+def get_public_profile(user_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    profile = user.profile
+    privacy = _serialize_privacy_preferences(user)
+    friends_count = _friends_count(db, user.id)
+    if privacy.get("private_account", True):
+        return {
+            "id": user.id,
+            "username": "Private member",
+            "avatar_url": None,
+            "country": profile.country if profile else None,
+            "bio": profile.bio if profile else None,
+            "member_since": user.created_at,
+            "private_account": True,
+            "public_safe_preferences": None,
+            "public_safe_stats": None,
+            "friends_count": friends_count,
+        }
+    return {
+        "id": user.id,
+        "username": user.username,
+        "avatar_url": profile.avatar_url if profile else None,
+        "country": profile.country if profile else None,
+        "bio": profile.bio if profile else None,
+        "member_since": user.created_at,
+        "private_account": False,
+        "public_safe_preferences": {
+            "community_profile_visibility": privacy.get("community_profile_visibility", "members"),
+            "anonymous_community_default": bool(privacy.get("anonymous_community_default", False)),
+        },
+        "public_safe_stats": {
+            "goals_count": len(user.emotional_goals or []),
+        },
+        "friends_count": friends_count,
+    }
+
+
+@router.post("/friends/requests")
+def create_friend_request(
+    payload: FriendRequestPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    target_user = db.query(User).filter(User.id == payload.target_user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if payload.target_user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="You cannot send a friend request to yourself")
+
+    existing = (
+        db.query(FriendRequest)
+        .filter(
+            or_(
+                and_(FriendRequest.from_user_id == current_user.id, FriendRequest.to_user_id == payload.target_user_id),
+                and_(FriendRequest.from_user_id == payload.target_user_id, FriendRequest.to_user_id == current_user.id),
+            )
+        )
+        .order_by(FriendRequest.id.desc())
+        .first()
+    )
+    if existing and existing.status in {"pending", "accepted"}:
+        raise HTTPException(status_code=400, detail="Friend request already exists")
+
+    now = datetime.now(timezone.utc)
+    request = FriendRequest(
+        from_user_id=current_user.id,
+        to_user_id=payload.target_user_id,
+        status="pending",
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(request)
+    db.commit()
+    db.add(
+        InAppNotification(
+            user_id=payload.target_user_id,
+            kind="friend_request",
+            title="New friend request",
+            body=f"{current_user.username} sent you a friend request. #{request.id}",
+            status="unread",
+            created_at=now,
+        )
+    )
+    db.commit()
+    return {"status": "pending", "request_id": request.id}
+
+
+@router.patch("/friends/requests/{request_id}")
+def update_friend_request(
+    request_id: int,
+    payload: FriendRequestActionPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    request = db.query(FriendRequest).filter(FriendRequest.id == request_id).first()
+    if not request:
+        raise HTTPException(status_code=404, detail="Friend request not found")
+    if current_user.id not in {request.from_user_id, request.to_user_id}:
+        raise HTTPException(status_code=403, detail="Not allowed")
+    if payload.action == "accepted" and current_user.id != request.to_user_id:
+        raise HTTPException(status_code=403, detail="Only recipient can accept")
+    request.status = payload.action
+    request.updated_at = datetime.now(timezone.utc)
+    if payload.action == "accepted":
+        db.add(
+            InAppNotification(
+                user_id=request.from_user_id,
+                kind="friend_request_accepted",
+                title="Friend request accepted",
+                body=f"{current_user.username} accepted your friend request.",
+                status="unread",
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+    db.commit()
+    return {"status": request.status, "request_id": request.id}
+
+
+@router.get("/notifications")
+def get_my_notifications(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    rows = (
+        db.query(InAppNotification)
+        .filter(InAppNotification.user_id == current_user.id)
+        .order_by(InAppNotification.id.desc())
+        .limit(100)
+        .all()
+    )
+    return [jsonable_encoder(r) for r in rows]
+
+
+@router.patch("/notifications/{notification_id}")
+def update_notification(notification_id: int, payload: NotificationUpdatePayload, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    row = db.query(InAppNotification).filter(InAppNotification.id == notification_id, InAppNotification.user_id == current_user.id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    row.status = payload.status
+    db.commit()
+    return {"id": row.id, "status": row.status}
 
 
 @router.get("/me/preferences", response_model=UserPreferencesResponse)
@@ -544,6 +788,7 @@ def _normalize_privacy_preferences(value: dict) -> dict:
     visibility = privacy.get("community_profile_visibility")
     if visibility not in {"anonymous", "members", "public"}:
         privacy["community_profile_visibility"] = "members"
+    privacy["private_account"] = bool(privacy.get("private_account", True))
     return privacy
 
 
@@ -554,6 +799,17 @@ def _normalize_goals(goals: list[str]) -> list[str]:
         if value and value not in normalized:
             normalized.append(value)
     return normalized[:8]
+
+
+def _friends_count(db: Session, user_id: int) -> int:
+    return (
+        db.query(FriendRequest)
+        .filter(
+            FriendRequest.status == "accepted",
+            or_(FriendRequest.from_user_id == user_id, FriendRequest.to_user_id == user_id),
+        )
+        .count()
+    )
 
 
 def _model_dict(model: Any, exclude: set[str] | None = None) -> dict:

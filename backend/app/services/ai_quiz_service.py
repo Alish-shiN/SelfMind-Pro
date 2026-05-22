@@ -107,7 +107,10 @@ class AIQuizService:
             current_user.id, quiz_type, exclude_session_id=session.id
         )
         trend = self._build_trend(
-            quiz_type, result_data["overall_score"], previous_result
+            quiz_type,
+            result_data["overall_score"],
+            previous_result,
+            payload.language,
         )
 
         result = self.repo.create_or_replace_result(
@@ -175,41 +178,83 @@ class AIQuizService:
         }
 
     def _build_trend(
-        self, quiz_type: str, current_score: float, previous_result: AIQuizResult | None
+        self,
+        quiz_type: str,
+        current_score: float,
+        previous_result: AIQuizResult | None,
+        language: str = "en",
     ) -> dict:
+        language_code = language if language in {"en", "ru", "kk"} else "en"
+        title = quiz_title(quiz_type).lower()
+
         if not previous_result:
+            explanations = {
+                "en": "This is your first result for this quiz, so future quizzes will show progress trends.",
+                "ru": "Это ваш первый результат по этому опросу — в следующих попытках появится сравнение с прошлым результатом.",
+                "kk": "Бұл сауалнама бойынша алғашқы нәтиже — келесі өту кезінде өткен нәтижемен салыстыру көрсетіледі.",
+            }
             return {
                 "trend_direction": "first_time",
                 "previous_score": None,
                 "score_difference": None,
-                "explanation": "This is your first result for this quiz, so future quizzes will show progress trends.",
+                "explanation": explanations[language_code],
             }
 
         previous_score = previous_result.overall_score
         difference = round(current_score - previous_score, 2)
         if abs(difference) < 5:
             direction = "stable"
-            explanation = (
-                f"Your {quiz_title(quiz_type).lower()} score is similar to last time. "
-                "Small steady steps can still support progress."
-            )
+            explanations = {
+                "en": (
+                    f"Your {title} score is similar to last time. "
+                    "Small steady steps can still support progress."
+                ),
+                "ru": (
+                    f"Результат «{title}» близок к прошлому. "
+                    "Небольшие устойчивые шаги всё равно поддерживают прогресс."
+                ),
+                "kk": (
+                    f"«{title}» бойынша ұпай алдыңғы нәтижеге жақын. "
+                    "Шағын тұрақты қадамдар да прогреске көмектеседі."
+                ),
+            }
         elif difference < 0:
             direction = "improved"
-            explanation = (
-                f"Your {quiz_title(quiz_type).lower()} score is lower than last time, "
-                "which may indicate the recent load feels more manageable."
-            )
+            explanations = {
+                "en": (
+                    f"Your {title} score is lower than last time, "
+                    "which may indicate the recent load feels more manageable."
+                ),
+                "ru": (
+                    f"Результат «{title}» ниже прошлого — "
+                    "возможно, недавняя нагрузка ощущается более управляемой."
+                ),
+                "kk": (
+                    f"«{title}» бойынша ұпай алдыңғыдан төмен — "
+                    "соңғы жүктеме басқарылатын болып сезілуі мүмкін."
+                ),
+            }
         else:
             direction = "worsened"
-            explanation = (
-                f"Your {quiz_title(quiz_type).lower()} score is higher than before. "
-                "Consider reducing overload and adding one short supportive break."
-            )
+            explanations = {
+                "en": (
+                    f"Your {title} score is higher than before. "
+                    "Consider reducing overload and adding one short supportive break."
+                ),
+                "ru": (
+                    f"Результат «{title}» выше прошлого. "
+                    "Попробуйте снизить нагрузку и добавить короткий поддерживающий перерыв."
+                ),
+                "kk": (
+                    f"«{title}» бойынша ұпай бұрынғыдан жоғары. "
+                    "Жүктемені азайтып, қысқа қолдаушы үзіліс қосуды қарастырыңыз."
+                ),
+            }
         return {
             "trend_direction": direction,
             "previous_score": previous_score,
             "score_difference": difference,
-            "explanation": explanation,
+            "explanation": explanations[language_code],
         }
 
     def _history_item(self, result: AIQuizResult) -> dict:

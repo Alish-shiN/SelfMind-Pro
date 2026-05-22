@@ -31,6 +31,14 @@ class ChatRepository:
             .first()
         )
 
+
+    def update_session_title(self, session: ChatSession, title: str) -> ChatSession:
+        session.title = title.strip()[:200]
+        self.db.add(session)
+        self.db.commit()
+        self.db.refresh(session)
+        return session
+
     def create_message(self, session_id: int, role: str, content: str) -> ChatMessage:
         message = ChatMessage(
             session_id=session_id,

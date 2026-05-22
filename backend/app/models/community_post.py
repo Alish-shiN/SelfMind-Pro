@@ -36,6 +36,7 @@ class CommunityPost(TimestampMixin, Base):
     )
     topic_tags: Mapped[list[str] | None] = mapped_column(ARRAY(String), nullable=True)
     is_anonymous: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     moderation_status: Mapped[str] = mapped_column(
         String(30), default="visible", nullable=False, index=True
     )

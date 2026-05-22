@@ -46,11 +46,11 @@ export function getChatSessionDetail(sessionId: number) {
   });
 }
 
-export function sendChatMessage(sessionId: number, content: string) {
+export function sendChatMessage(sessionId: number, content: string, sessionTitle?: string) {
   return apiFetch<ChatSendResponse>(`/chat/sessions/${sessionId}/messages`, {
     method: 'POST',
     auth: true,
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(sessionTitle ? { content, session_title: sessionTitle } : { content }),
   });
 }
 

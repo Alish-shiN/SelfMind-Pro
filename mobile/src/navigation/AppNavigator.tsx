@@ -15,6 +15,7 @@ import { FeaturePlaceholderScreen } from '../screens/FeaturePlaceholderScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { AIDiaryScreen } from '../screens/AiDiaryScreen';
 import { AiChatScreen } from '../screens/AiChatScreen';
+import { AiChatHistoryScreen } from '../screens/AiChatHistoryScreen';
 import { AiQuizScreen } from '../screens/AiQuizScreen';
 import { CommunityScreen } from '../screens/CommunityScreen';
 import { GoalsScreen } from '../screens/GoalsScreen';
@@ -26,6 +27,9 @@ import { ArchiveSearchScreen } from '../screens/ArchiveSearchScreen';
 import { ProfilePersonalizationScreen } from '../screens/ProfilePersonalizationScreen';
 import { ProfilePrivacyCenterScreen } from '../screens/ProfilePrivacyCenterScreen';
 import { ProfileRemindersScreen } from '../screens/ProfileRemindersScreen';
+import { ProfileAccountInfoScreen } from '../screens/ProfileAccountInfoScreen';
+import { NotificationsScreen } from '../screens/NotificationsScreen';
+import { DirectChatScreen } from '../screens/DirectChatScreen';
 import { getCurrentUser, getUserPreferences, UserPreferences } from '../api/user';
 import { colors } from '../theme/colors';
 
@@ -46,7 +50,10 @@ function HomeStackNavigator() {
     <HomeStack.Navigator id="HomeStack" screenOptions={{ headerShown: false }}>
       <HomeStack.Screen name="HomeMain" component={HomeScreen} />
       <HomeStack.Screen name="AiDiary" component={AIDiaryScreen} />
+      <HomeStack.Screen name="AiChatHistory" component={AiChatHistoryScreen} />
       <HomeStack.Screen name="AiChat" component={AiChatScreen} />
+      <HomeStack.Screen name="Notifications" component={NotificationsScreen} />
+      <HomeStack.Screen name="DirectChat" component={DirectChatScreen} />
       <HomeStack.Screen name="AiQuiz" component={AiQuizScreen} />
       <HomeStack.Screen name="Safety" component={SafetyScreen} />
       <HomeStack.Screen name="Feature" component={FeaturePlaceholderScreen} />
@@ -190,6 +197,7 @@ export function AppNavigator() {
             privacy_notice_accepted: false,
             privacy_notice_version: null,
             privacy_notice_accepted_at: null,
+            private_account: true,
           },
           ai_tone: 'calm',
           onboarding_completed: true,
@@ -240,6 +248,7 @@ export function AppNavigator() {
             <RootStack.Screen name="ProfilePersonalization" component={ProfilePersonalizationScreen} />
             <RootStack.Screen name="ProfilePrivacyCenter" component={ProfilePrivacyCenterScreen} />
             <RootStack.Screen name="ProfileReminders" component={ProfileRemindersScreen} />
+            <RootStack.Screen name="ProfileAccountInfo" component={ProfileAccountInfoScreen} />
           </>
         ) : !onboardingDone ? (
           <RootStack.Screen name="Onboarding">

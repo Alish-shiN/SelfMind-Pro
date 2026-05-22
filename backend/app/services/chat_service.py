@@ -46,6 +46,9 @@ class ChatService:
                 status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found"
             )
 
+        if payload.session_title and session.title == "New conversation":
+            self.chat_repo.update_session_title(session, payload.session_title)
+
         user_message = self.chat_repo.create_message(
             session_id=session.id,
             role="user",
