@@ -1,4 +1,5 @@
-from sqlalchemy import ForeignKey, String, Text
+from datetime import date
+from sqlalchemy import Date, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -12,5 +13,7 @@ class Profile(TimestampMixin, Base):
     full_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
+    country: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     user = relationship("User", back_populates="profile")

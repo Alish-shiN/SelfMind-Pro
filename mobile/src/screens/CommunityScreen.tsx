@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -16,12 +17,14 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { ApiError, apiFetch } from "../api/client";
-import { getCurrentUser, getUserPreferences } from "../api/user";
+import { getCurrentUser, getUserPreferences, getPublicProfile, resolveMediaUrl, sendFriendRequest } from "../api/user";
+import { createOrGetConversation } from "../api/dm";
 import type { UserResponse } from "../api/auth";
 import { colors } from "../theme/colors";
 import { useTranslation } from "../i18n/I18nContext";
 
-type CommunityAuthor = { id: number | null; username: string };
+type CommunityAuthor = { id: number | null; username: string; avatar_url?: string | null };
+type LocalImageFile = { uri: string; name: string; type: string };
 type ReactionSummary = {
   support: number;
   me_too: number;
@@ -57,6 +60,7 @@ type CommunityPost = {
   is_anonymous: boolean;
   support_space: SupportSpaceKey | string;
   topic_tags: string[];
+  image_url?: string | null;
   author: CommunityAuthor;
   comments_count: number;
   reactions: ReactionSummary;
@@ -135,11 +139,12 @@ const createPost = (
   is_anonymous: boolean,
   support_space: string,
   topic_tags: string[],
+  image_url?: string | null,
 ) =>
   apiFetch<CommunityPost>("/community/posts", {
     method: "POST",
     auth: true,
-    body: JSON.stringify({ content, is_anonymous, support_space, topic_tags }),
+    body: JSON.stringify({ content, is_anonymous, support_space, topic_tags, image_url }),
   });
 const createComment = (
   postId: number,
@@ -179,6 +184,19 @@ const reactToComment = (id: number, reaction_type: ReactionType) =>
     auth: true,
     body: JSON.stringify({ reaction_type }),
   });
+const uploadCommunityImage = async (file: LocalImageFile) => {
+  const fd = new FormData();
+  fd.append("file", {
+    uri: file.uri,
+    name: file.name,
+    type: file.type,
+  } as any);
+  return apiFetch<{ image_url: string }>("/community/uploads/image", { method: "POST", auth: true, body: fd as any });
+};
+
+function toApiFileUrl(url?: string | null) {
+  return resolveMediaUrl(url);
+}
 
 function timeAgo(iso: string, t: (key: string, params?: Record<string, string | number>) => string): string {
   const diff = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
@@ -363,6 +381,7 @@ function NewPostModal({
   const [space, setSpace] = useState<SupportSpaceKey | string>("general");
   const [isAnon, setIsAnon] = useState(defaultAnonymous);
   const [loading, setLoading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<LocalImageFile | null>(null);
 
   useEffect(() => {
     if (visible) setIsAnon(defaultAnonymous);
@@ -375,11 +394,17 @@ function NewPostModal({
     }
     setLoading(true);
     try {
-      await createPost(content.trim(), isAnon, space, parseTags(tags));
+      let imageUrl: string | null = null;
+      if (selectedImage) {
+        const uploaded = await uploadCommunityImage(selectedImage);
+        imageUrl = uploaded.image_url;
+      }
+      await createPost(content.trim(), isAnon, space, parseTags(tags), imageUrl);
       setContent("");
       setTags("");
       setSpace("general");
       setIsAnon(defaultAnonymous);
+      setSelectedImage(null);
       onCreated();
     } catch (e: any) {
       Alert.alert(t("error"), e?.message ?? t("couldNotPost"));
@@ -387,6 +412,22 @@ function NewPostModal({
       setLoading(false);
     }
   };
+
+  const pickImage = async () => {
+    const ImagePicker: any = require("expo-image-picker");
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return;
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.9 });
+    if (res.canceled) return;
+    const asset = res.assets?.[0];
+    if (!asset?.uri) return;
+    setSelectedImage({
+      uri: asset.uri,
+      name: asset.fileName || "post.jpg",
+      type: asset.mimeType || "image/jpeg",
+    });
+  };
+
 
   return (
     <Modal
@@ -480,6 +521,19 @@ function NewPostModal({
               </View>
               <Text style={modalStyles.anonText}>{t("postAnonymously")}</Text>
             </Pressable>
+            <Pressable style={modalStyles.photoBtn} onPress={pickImage}>
+              <Ionicons name="image-outline" size={16} color={colors.coral} />
+              <Text style={modalStyles.photoBtnText}>Add photo</Text>
+            </Pressable>
+            {selectedImage ? (
+              <View style={modalStyles.previewWrap}>
+                <Image source={{ uri: selectedImage.uri }} style={modalStyles.previewImage} />
+                <Pressable style={modalStyles.removePhotoBtn} onPress={() => setSelectedImage(null)}>
+                  <Ionicons name="close-circle" size={16} color="#fff" />
+                  <Text style={modalStyles.removePhotoText}>Remove</Text>
+                </Pressable>
+              </View>
+            ) : null}
           </ScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
@@ -496,6 +550,7 @@ function PostCard({
   onReact,
   canDelete,
   activeReactions,
+  onAuthorPress,
 }: {
   post: CommunityPost;
   space?: SupportSpace;
@@ -505,24 +560,31 @@ function PostCard({
   onReact: (reaction: ReactionType) => void | Promise<void>;
   canDelete: boolean;
   activeReactions?: ReactionState;
+  onAuthorPress?: (author: CommunityAuthor) => void;
 }) {
   const { t } = useTranslation();
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const avatarUrl = post.is_anonymous ? null : resolveMediaUrl(post.author.avatar_url);
   return (
     <Pressable style={cardStyles.card} onPress={onPress}>
       <View style={cardStyles.header}>
-        <View style={cardStyles.avatar}>
-          <Text style={cardStyles.avatarText}>
-            {post.author.username[0].toUpperCase()}
-          </Text>
-        </View>
-        <View style={{ flex: 1 }}>
+        <Pressable style={cardStyles.avatar} onPress={() => onAuthorPress?.(post.author)}>
+          {avatarUrl && !avatarFailed ? (
+            <Image source={{ uri: avatarUrl }} style={cardStyles.avatarImg} onError={() => setAvatarFailed(true)} />
+          ) : (
+            <Text style={cardStyles.avatarText}>
+              {post.author.username[0].toUpperCase()}
+            </Text>
+          )}
+        </Pressable>
+        <Pressable style={{ flex: 1 }} onPress={() => onAuthorPress?.(post.author)}>
           <Text style={cardStyles.author}>{post.author.username}</Text>
           <Text style={cardStyles.time}>
             {space?.emoji ?? "💬"}{" "}
             {supportSpaceTitle(space, t, String(post.support_space))} ·{" "}
             {timeAgo(post.created_at, t)}
           </Text>
-        </View>
+        </Pressable>
         {post.is_anonymous ? (
           <View style={cardStyles.anonChip}>
             <Text style={cardStyles.anonText}>{t("anonymous")}</Text>
@@ -530,6 +592,7 @@ function PostCard({
         ) : null}
       </View>
       <Text style={cardStyles.content}>{post.content}</Text>
+      {post.image_url ? <Image source={{ uri: resolveMediaUrl(post.image_url) ?? undefined }} style={cardStyles.postImage} resizeMode="contain" /> : null}
       {post.topic_tags.length > 0 ? (
         <View style={cardStyles.tagsRow}>
           {post.topic_tags.map((tag) => (
@@ -678,6 +741,9 @@ function PostDetailModal({
                   {timeAgo(detail.created_at, t)}
                 </Text>
                 <Text style={cardStyles.content}>{detail.content}</Text>
+                {detail.image_url ? (
+                  <Image source={{ uri: resolveMediaUrl(detail.image_url) ?? undefined }} style={cardStyles.postImage} resizeMode="contain" />
+                ) : null}
                 <ReactionRow
                   reactions={detail.reactions}
                   activeReactions={activePostReactions}
@@ -771,7 +837,7 @@ function PostDetailModal({
   );
 }
 
-export function CommunityScreen() {
+export function CommunityScreen({ navigation }: any) {
   const { t } = useTranslation();
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [guidelines, setGuidelines] = useState<Guidelines | null>(null);
@@ -784,6 +850,12 @@ export function CommunityScreen() {
   const [showNew, setShowNew] = useState(false);
   const [showGuidelines, setShowGuidelines] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
+  const [publicProfile, setPublicProfile] = useState<any | null>(null);
+  const handleAuthorPress = async (author: CommunityAuthor) => {
+    if (!author.id) return;
+    const p = await getPublicProfile(author.id);
+    setPublicProfile(p);
+  };
   const [activePostReactions, setActivePostReactions] = useState<Record<number, ReactionState>>({});
   const [activeCommentReactions, setActiveCommentReactions] = useState<Record<number, ReactionState>>({});
 
@@ -1000,6 +1072,7 @@ export function CommunityScreen() {
                 }}
                 canDelete={canDeleteContent(post.author, currentUser)}
                 activeReactions={activePostReactions[post.id]}
+                onAuthorPress={handleAuthorPress}
               />
             ))
           )}
@@ -1040,6 +1113,69 @@ export function CommunityScreen() {
             load();
           }}
         />
+      ) : null}
+      {publicProfile ? (
+        <Modal visible animationType="slide" presentationStyle="pageSheet">
+          <SafeAreaView style={modalStyles.safe} edges={["top", "bottom"]}>
+            <View style={modalStyles.topBar}>
+              <Pressable onPress={() => setPublicProfile(null)} hitSlop={12}>
+                <Ionicons name="arrow-back" size={22} color={colors.text} />
+              </Pressable>
+              <Text style={modalStyles.title}>Profile</Text>
+              <View style={{ width: 22 }} />
+            </View>
+            <ScrollView contentContainerStyle={modalStyles.body}>
+              <View style={modalStyles.profileCard}>
+                <View style={modalStyles.profileAvatarWrap}>
+                  {resolveMediaUrl(publicProfile.avatar_url) ? (
+                    <Image source={{ uri: resolveMediaUrl(publicProfile.avatar_url) ?? undefined }} style={modalStyles.profileAvatarImg} />
+                  ) : (
+                    <Text style={modalStyles.profileAvatarText}>{publicProfile.username?.[0]?.toUpperCase?.() ?? "?"}</Text>
+                  )}
+                </View>
+                <Text style={modalStyles.profileName}>{publicProfile.username}</Text>
+                <View style={modalStyles.statPill}>
+                  <Text style={modalStyles.statLabel}>Friends</Text>
+                  <Text style={modalStyles.statValue}>{publicProfile.friends_count ?? 0}</Text>
+                </View>
+                <View style={modalStyles.profileInfoCard}>
+                  <Text style={modalStyles.profileInfoText}>{publicProfile.bio || "No bio provided yet."}</Text>
+                  <Text style={modalStyles.profileInfoMeta}>Country: {publicProfile.country || "—"}</Text>
+                  <Text style={modalStyles.profileInfoMeta}>Member since: {new Date(publicProfile.member_since).toLocaleDateString()}</Text>
+                </View>
+                <View style={modalStyles.profileActionsRow}>
+                <Pressable
+                  style={[modalStyles.profileActionBtn, modalStyles.friendBtn]}
+                  onPress={async () => {
+                    try {
+                      await sendFriendRequest(publicProfile.id);
+                      Alert.alert("Success", "Friend request sent.");
+                    } catch (e: any) {
+                      Alert.alert("Error", e?.message ?? "Could not send request");
+                    }
+                  }}
+                >
+                  <Text style={modalStyles.postText}>Add friend</Text>
+                </Pressable>
+                <Pressable
+                  style={[modalStyles.profileActionBtn, modalStyles.messageBtn]}
+                  onPress={async () => {
+                    try {
+                      const conv = await createOrGetConversation(publicProfile.id);
+                      setPublicProfile(null);
+                      navigation.navigate("Home", { screen: "DirectChat", params: { conversationId: conv.id, title: publicProfile.username } });
+                    } catch (e: any) {
+                      Alert.alert("Error", e?.message ?? "Could not open chat");
+                    }
+                  }}
+                >
+                  <Text style={modalStyles.postText}>Message</Text>
+                </Pressable>
+                </View>
+              </View>
+            </ScrollView>
+          </SafeAreaView>
+        </Modal>
       ) : null}
     </SafeAreaView>
   );
@@ -1095,6 +1231,7 @@ const cardStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  avatarImg: { width: "100%", height: "100%" },
   avatarText: { fontSize: 15, fontWeight: "700", color: colors.text },
   author: { fontSize: 14, fontWeight: "700", color: colors.text },
   time: { fontSize: 12, color: colors.textMuted },
@@ -1106,6 +1243,7 @@ const cardStyles = StyleSheet.create({
   },
   anonText: { fontSize: 11, color: colors.textMuted },
   content: { fontSize: 14, color: colors.text, lineHeight: 21 },
+  postImage: { width: "100%", minHeight: 220, maxHeight: 420, borderRadius: 12, marginTop: 10, backgroundColor: "#F3F4F6" },
   tagsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 },
   tag: {
     backgroundColor: "#F3EEFF",
@@ -1158,6 +1296,21 @@ const modalStyles = StyleSheet.create({
   },
   postText: { color: "#fff", fontWeight: "800", fontSize: 13 },
   body: { padding: 20, paddingBottom: 40 },
+  profileCard: { backgroundColor: "#fff", borderRadius: 22, borderWidth: 1, borderColor: "#E8ECF4", padding: 18, gap: 12 },
+  profileAvatarWrap: { width: 108, height: 108, borderRadius: 54, alignSelf: "center", overflow: "hidden", borderWidth: 2, borderColor: colors.coral, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
+  profileAvatarImg: { width: "100%", height: "100%" },
+  profileAvatarText: { fontSize: 34, fontWeight: "900", color: colors.text },
+  profileName: { fontSize: 22, fontWeight: "900", color: colors.text, textAlign: "center" },
+  statPill: { alignSelf: "center", backgroundColor: "#FFF3F1", borderWidth: 1, borderColor: "#FFD4CC", borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 8 },
+  statLabel: { color: colors.textMuted, fontWeight: "700", fontSize: 12 },
+  statValue: { color: colors.coral, fontWeight: "900", fontSize: 14 },
+  profileInfoCard: { backgroundColor: "#F8FAFF", borderRadius: 14, borderWidth: 1, borderColor: "#E8ECF4", padding: 12, gap: 6 },
+  profileInfoText: { color: colors.text, fontWeight: "600", lineHeight: 20 },
+  profileInfoMeta: { color: colors.textMuted, fontWeight: "700", fontSize: 12 },
+  profileActionsRow: { flexDirection: "row", gap: 10 },
+  profileActionBtn: { flex: 1, borderRadius: 12, alignItems: "center", justifyContent: "center", paddingVertical: 11 },
+  friendBtn: { backgroundColor: colors.coral },
+  messageBtn: { backgroundColor: "#6366F1" },
   detailScroll: { flex: 1 },
   bodyWithInput: { padding: 20, paddingBottom: 20 },
   fieldLabel: {
@@ -1218,6 +1371,40 @@ const modalStyles = StyleSheet.create({
   },
   checkboxOn: { backgroundColor: colors.coral, borderColor: colors.coral },
   anonText: { fontSize: 14, color: colors.text, fontWeight: "700" },
+  photoBtn: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    alignSelf: "flex-start",
+    backgroundColor: "#FFF0EE",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  photoBtnText: { color: colors.coral, fontWeight: "800", fontSize: 13 },
+  previewWrap: {
+    marginTop: 12,
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  previewImage: { width: "100%", height: 180, backgroundColor: "#F4F5F7" },
+  removePhotoBtn: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 999,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  removePhotoText: { color: "#fff", fontSize: 11, fontWeight: "700" },
   guidelineItem: {
     flexDirection: "row",
     gap: 10,

@@ -18,55 +18,35 @@ import { useTranslation } from "../i18n/I18nContext";
 import { useAuth } from "../context/AuthContext";
 import type { HomeStackParamList } from "../navigation/types";
 import { ApiError } from "../api/client";
-import {
-  createChatSession,
-  getChatSessionDetail,
-  getMyChatSessions,
-  sendChatMessage,
-} from "../api/chat";
+import { getChatSessionDetail, sendChatMessage } from "../api/chat";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "AiChat">;
-
 type ChatMessage = { id: number; role: "user" | "assistant"; text: string };
 
-export function AiChatScreen({ navigation }: Props) {
+export function AiChatScreen({ navigation, route }: Props) {
   const { t } = useTranslation();
   const { signOut } = useAuth();
   const insets = useSafeAreaInsets();
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<number | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [awaitingAssistant, setAwaitingAssistant] = useState(false);
+  const [currentTitle, setCurrentTitle] = useState(route.params.title || t("aiChat"));
   const mountedRef = useRef(false);
   const scrollRef = useRef<ScrollView | null>(null);
+  const sessionId = route.params.sessionId;
 
-  const canSend = useMemo(
-    () => text.trim().length > 0 && !loading && !awaitingAssistant,
-    [awaitingAssistant, loading, text],
-  );
+  const canSend = useMemo(() => text.trim().length > 0 && !loading && !awaitingAssistant, [awaitingAssistant, loading, text]);
 
   const bootstrap = useCallback(async () => {
     try {
       setError(null);
       setLoading(true);
-
-      const sessions = await getMyChatSessions();
-      const active = sessions.length ? sessions[sessions.length - 1] : null;
-
-      const sid = active?.id ?? (await createChatSession()).id;
-      const detail = await getChatSessionDetail(sid);
-
+      const detail = await getChatSessionDetail(sessionId);
+      setCurrentTitle(detail.session.title || route.params.title || t("aiChat"));
       if (!mountedRef.current) return;
-      setSessionId(sid);
-      setMessages(
-        detail.messages.map((m) => ({
-          id: m.id,
-          role: m.role === "assistant" ? "assistant" : "user",
-          text: m.content,
-        })),
-      );
+      setMessages(detail.messages.map((m) => ({ id: m.id, role: m.role === "assistant" ? "assistant" : "user", text: m.content })));
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
         await signOut("sessionExpired");
@@ -76,7 +56,7 @@ export function AiChatScreen({ navigation }: Props) {
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, [signOut]);
+  }, [sessionId, signOut, t]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -92,8 +72,7 @@ export function AiChatScreen({ navigation }: Props) {
   }, [awaitingAssistant, messages.length]);
 
   const send = useCallback(async () => {
-    if (!canSend || sessionId == null) return;
-
+    if (!canSend) return;
     const content = text.trim();
     const tempId = -Date.now();
     setText("");
@@ -102,20 +81,13 @@ export function AiChatScreen({ navigation }: Props) {
     setMessages((prev) => [...prev, { id: tempId, role: "user", text: content }]);
 
     try {
-      const res = await sendChatMessage(sessionId, content);
-      // Backend returns both messages so we replace the optimistic user message
-      // and render the real assistant reply underneath it.
+      const shouldSetTitle = messages.filter((m) => m.role === "user").length === 0;
+      const nextTitle = shouldSetTitle ? content.slice(0, 60) : undefined;
+      const res = await sendChatMessage(sessionId, content, nextTitle);
+      if (nextTitle) setCurrentTitle(nextTitle);
       setMessages((prev) => [
-        ...prev.map((message) =>
-          message.id === tempId
-            ? ({ id: res.user_message.id, role: "user", text: res.user_message.content } as ChatMessage)
-            : message,
-        ),
-        {
-          id: res.assistant_message.id,
-          role: "assistant",
-          text: res.assistant_message.content,
-        },
+        ...prev.map((message): ChatMessage => (message.id === tempId ? { id: res.user_message.id, role: "user", text: res.user_message.content } : message)),
+        { id: res.assistant_message.id, role: "assistant", text: res.assistant_message.content },
       ]);
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
@@ -126,105 +98,32 @@ export function AiChatScreen({ navigation }: Props) {
     } finally {
       setAwaitingAssistant(false);
     }
-  }, [canSend, sessionId, signOut, t, text]);
+  }, [canSend, messages, sessionId, signOut, t, text]);
 
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
-      <KeyboardAvoidingView
-        style={styles.kav}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
-      >
+      <KeyboardAvoidingView style={styles.kav} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}>
         <View style={styles.topRow}>
-          <Pressable onPress={() => navigation.goBack()} hitSlop={12}>
-            <Ionicons name="chevron-back" size={22} color={colors.text} />
-          </Pressable>
-          <Text style={styles.title}>{t("aiChat")}</Text>
+          <Pressable onPress={() => navigation.goBack()} hitSlop={12}><Ionicons name="chevron-back" size={22} color={colors.text} /></Pressable>
+          <Text style={styles.title} numberOfLines={1}>{currentTitle}</Text>
           <View style={{ width: 22 }} />
         </View>
 
-        <ScrollView
-          ref={scrollRef}
-          style={styles.list}
-          contentContainerStyle={styles.listContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          {error ? (
-            <View style={styles.errBox}>
-              <Text style={styles.errText}>{error}</Text>
-              <Pressable style={styles.retryBtn} onPress={bootstrap}>
-                <Text style={styles.retryText}>{t("retry")}</Text>
-              </Pressable>
-            </View>
-          ) : null}
+        <View style={styles.disclaimerBox}><Text style={styles.disclaimerText}>AI can make mistakes. It is not a therapist or medical professional.</Text></View>
 
-          {!loading && !error && messages.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyTitle}>{t("startConversation")}</Text>
-              <Text style={styles.emptySub}>{t("aiChatEmptySub")}</Text>
-            </View>
-          ) : null}
-
+        <ScrollView ref={scrollRef} style={styles.list} contentContainerStyle={styles.listContent} keyboardShouldPersistTaps="handled">
+          {error ? <View style={styles.errBox}><Text style={styles.errText}>{error}</Text><Pressable style={styles.retryBtn} onPress={bootstrap}><Text style={styles.retryText}>{t("retry")}</Text></Pressable></View> : null}
+          {!loading && !error && messages.length === 0 ? <View style={styles.emptyBox}><Text style={styles.emptyTitle}>Start your first conversation</Text><Text style={styles.emptySub}>{t("aiChatEmptySub")}</Text></View> : null}
           {messages.map((m) => {
             const isUser = m.role === "user";
-            return (
-              <View
-                key={m.id}
-                style={[
-                  styles.bubbleRow,
-                  isUser ? styles.bubbleRowUser : styles.bubbleRowAssistant,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.bubble,
-                    isUser ? styles.bubbleUser : styles.bubbleAssistant,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.bubbleText,
-                      isUser
-                        ? styles.bubbleTextUser
-                        : styles.bubbleTextAssistant,
-                    ]}
-                  >
-                    {m.text}
-                  </Text>
-                </View>
-              </View>
-            );
+            return <View key={m.id} style={[styles.bubbleRow, isUser ? styles.bubbleRowUser : styles.bubbleRowAssistant]}><View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAssistant]}><Text style={[styles.bubbleText, isUser ? styles.bubbleTextUser : styles.bubbleTextAssistant]}>{m.text}</Text></View></View>;
           })}
-
-          {awaitingAssistant ? (
-            <View style={[styles.bubbleRow, styles.bubbleRowAssistant]}>
-              <View style={[styles.bubble, styles.bubbleAssistant, styles.typingBubble]}>
-                <ActivityIndicator color={colors.coral} size="small" />
-                <Text style={styles.typingText}>{t("assistantTyping")}</Text>
-              </View>
-            </View>
-          ) : null}
+          {awaitingAssistant ? <View style={[styles.bubbleRow, styles.bubbleRowAssistant]}><View style={[styles.bubble, styles.bubbleAssistant, styles.typingBubble]}><ActivityIndicator color={colors.coral} size="small" /><Text style={styles.typingText}>{t("assistantTyping")}</Text></View></View> : null}
         </ScrollView>
 
         <View style={[styles.composer, { paddingBottom: Math.max(8, insets.bottom) }]}>
-          <TextInput
-            style={styles.input}
-            placeholder={t("writeMessage")}
-            placeholderTextColor={colors.textPlaceholder}
-            selectionColor={colors.coral}
-            cursorColor={colors.text}
-            value={text}
-            onChangeText={setText}
-            multiline
-            editable={!loading && !awaitingAssistant}
-          />
-          <Pressable
-            style={[styles.sendBtn, !canSend && { opacity: 0.55 }]}
-            onPress={send}
-            disabled={!canSend}
-          >
-            <Ionicons name="send" size={18} color="#fff" />
-          </Pressable>
+          <TextInput style={styles.input} placeholder={t("writeMessage")} placeholderTextColor={colors.textPlaceholder} selectionColor={colors.coral} cursorColor={colors.text} value={text} onChangeText={setText} multiline editable={!loading && !awaitingAssistant} />
+          <Pressable style={[styles.sendBtn, !canSend && { opacity: 0.55 }]} onPress={send} disabled={!canSend}><Ionicons name="send" size={18} color="#fff" /></Pressable>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -232,101 +131,22 @@ export function AiChatScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.backgroundSoft },
-  kav: { flex: 1 },
-  topRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  title: { fontSize: 17, fontWeight: "800", color: colors.text },
-  list: { flex: 1 },
-  listContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, gap: 10 },
-
-  bubbleRow: { flexDirection: "row" },
-  bubbleRowUser: { justifyContent: "flex-end" },
-  bubbleRowAssistant: { justifyContent: "flex-start" },
-  bubble: {
-    maxWidth: "80%",
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  bubbleUser: { backgroundColor: colors.coral },
-  bubbleAssistant: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: "#EEF2FF",
-  },
-  bubbleText: { fontSize: 14, lineHeight: 20 },
-  bubbleTextUser: { color: colors.white },
-  bubbleTextAssistant: { color: colors.text },
-  typingBubble: { flexDirection: "row", alignItems: "center", gap: 8 },
-  typingText: { color: colors.textMuted, fontSize: 13, fontWeight: "700" },
-
-  errBox: {
-    margin: 16,
-    borderRadius: 16,
-    padding: 14,
-    backgroundColor: "#FFE5E5",
-  },
-  errText: { color: "#B91C1C", fontWeight: "700", marginBottom: 10 },
-  retryBtn: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.coral,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  retryText: { color: "#fff", fontWeight: "900", fontSize: 12 },
-
-  emptyBox: {
-    margin: 16,
-    borderRadius: 16,
-    padding: 16,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#EEF2FF",
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: colors.text,
-    marginBottom: 6,
-  },
-  emptySub: { fontSize: 13, color: colors.textMuted, lineHeight: 18 },
-
-  composer: {
-    flexDirection: "row",
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#EEF2FF",
-    backgroundColor: colors.backgroundSoft,
-  },
-  input: {
-    flex: 1,
-    minHeight: 44,
-    maxHeight: 120,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 18,
-    backgroundColor: colors.white,
-    color: colors.text,
-    borderWidth: 1,
-    borderColor: "#EEF2FF",
-  },
-  sendBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: colors.coral,
-    alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "flex-end",
-  },
+  safe: { flex: 1, backgroundColor: colors.backgroundSoft }, kav: { flex: 1 },
+  topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 10 },
+  title: { fontSize: 17, fontWeight: "800", color: colors.text, flex: 1, textAlign: "center", marginHorizontal: 8 },
+  disclaimerBox: { marginHorizontal: 16, marginTop: 4, marginBottom: 4, padding: 10, borderRadius: 12, backgroundColor: "#FFF7ED", borderWidth: 1, borderColor: "#FED7AA" },
+  disclaimerText: { fontSize: 12, color: "#9A3412", fontWeight: "600" },
+  list: { flex: 1 }, listContent: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, gap: 10 },
+  bubbleRow: { flexDirection: "row" }, bubbleRowUser: { justifyContent: "flex-end" }, bubbleRowAssistant: { justifyContent: "flex-start" },
+  bubble: { maxWidth: "80%", borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10 },
+  bubbleUser: { backgroundColor: colors.coral }, bubbleAssistant: { backgroundColor: colors.white, borderWidth: 1, borderColor: "#EEF2FF" },
+  bubbleText: { fontSize: 14, lineHeight: 20 }, bubbleTextUser: { color: colors.white }, bubbleTextAssistant: { color: colors.text },
+  typingBubble: { flexDirection: "row", alignItems: "center", gap: 8 }, typingText: { color: colors.textMuted, fontSize: 13, fontWeight: "700" },
+  errBox: { margin: 16, borderRadius: 16, padding: 14, backgroundColor: "#FFE5E5" }, errText: { color: "#B91C1C", fontWeight: "700", marginBottom: 10 },
+  retryBtn: { alignSelf: "flex-start", backgroundColor: colors.coral, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 }, retryText: { color: "#fff", fontWeight: "900", fontSize: 12 },
+  emptyBox: { margin: 16, borderRadius: 16, padding: 16, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#EEF2FF" },
+  emptyTitle: { fontSize: 16, fontWeight: "900", color: colors.text, marginBottom: 6 }, emptySub: { fontSize: 13, color: colors.textMuted, lineHeight: 18 },
+  composer: { flexDirection: "row", gap: 10, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, borderTopWidth: 1, borderTopColor: "#EEF2FF", backgroundColor: colors.backgroundSoft },
+  input: { flex: 1, minHeight: 44, maxHeight: 120, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18, backgroundColor: colors.white, color: colors.text, borderWidth: 1, borderColor: "#EEF2FF" },
+  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.coral, alignItems: "center", justifyContent: "center", alignSelf: "flex-end" },
 });

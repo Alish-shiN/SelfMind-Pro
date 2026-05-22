@@ -22,6 +22,7 @@ class CommunityRepository:
         is_anonymous: bool,
         support_space: str,
         topic_tags: list[str] | None,
+        image_url: str | None = None,
     ) -> CommunityPost:
         post = CommunityPost(
             user_id=user_id,
@@ -29,6 +30,7 @@ class CommunityRepository:
             is_anonymous=is_anonymous,
             support_space=support_space,
             topic_tags=topic_tags or [],
+            image_url=image_url,
         )
         self.db.add(post)
         self.db.commit()

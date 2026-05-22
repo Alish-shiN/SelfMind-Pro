@@ -82,6 +82,7 @@ class CommunityService:
             is_anonymous=payload.is_anonymous,
             support_space=payload.support_space,
             topic_tags=self._normalize_tags(payload.topic_tags),
+            image_url=payload.image_url,
         )
         self.safety_service.flag_if_needed(
             current_user, "community_post", post.id, payload.content
@@ -329,6 +330,7 @@ class CommunityService:
             "is_anonymous": post.is_anonymous,
             "support_space": post.support_space,
             "topic_tags": post.topic_tags or [],
+            "image_url": post.image_url,
             "author": author,
             "comments_count": len(
                 [
@@ -365,8 +367,8 @@ class CommunityService:
         privacy = user.privacy_preferences or {}
         hide_profile = privacy.get("community_profile_visibility") == "anonymous"
         if is_anonymous or hide_profile:
-            return {"id": None, "username": "Anonymous"}
-        return {"id": user.id, "username": user.username}
+            return {"id": None, "username": "Anonymous", "avatar_url": None}
+        return {"id": user.id, "username": user.username, "avatar_url": user.profile.avatar_url if user.profile else None}
 
     def _serialize_queue_item(self, item: dict) -> dict:
         obj = item["obj"]

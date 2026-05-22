@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -17,6 +18,7 @@ import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { languageLocales, useTranslation } from "../i18n/I18nContext";
 import { setAchievementWeeklyMoodReview } from "../lib/storage";
+import { getAccountInfo, resolveMediaUrl } from "../api/user";
 
 const MOOD_EMOJI: Record<string, string> = {
   joy: "😊",
@@ -355,6 +357,8 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DashboardHome | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
   const [analytics, setAnalytics] = useState<MoodAnalytics | null>(null);
   const [analyticsPeriod, setAnalyticsPeriod] =
     useState<AnalyticsPeriod>("30d");
@@ -389,12 +393,15 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [d, moodAnalytics] = await Promise.all([
+      const [d, moodAnalytics, accountInfo] = await Promise.all([
         getDashboardHome(),
         getMoodAnalytics(analyticsPeriod, analyticsGranularity),
+        getAccountInfo().catch(() => null),
       ]);
       setData(d);
       setAnalytics(moodAnalytics);
+      setAvatarUrl(resolveMediaUrl(accountInfo?.avatar_url));
+      setAvatarFailed(false);
       void setAchievementWeeklyMoodReview();
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
@@ -466,9 +473,7 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
             accessibilityRole="button"
             hitSlop={8}
           >
-            <Text style={styles.avatarText}>
-              {(data?.user.username?.[0] ?? "U").toUpperCase()}
-            </Text>
+            <Ionicons name="person-circle-outline" size={22} color={colors.text} />
           </Pressable>
         </View>
 
@@ -933,6 +938,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarText: { fontSize: 18, fontWeight: "700", color: colors.text },
+  avatarImage: { width: "100%", height: "100%", borderRadius: 22 },
 
   errBox: { marginBottom: 16 },
   errText: { color: "#B91C1C", marginBottom: 8, fontSize: 13 },

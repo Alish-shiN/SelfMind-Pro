@@ -41,7 +41,8 @@ export async function apiFetch<T>(
   const url = `${API_BASE_URL}${API_PREFIX}${path}`;
   const h = new Headers(headers);
   h.set('Accept', 'application/json');
-  if (rest.body && !h.has('Content-Type')) {
+  const isFormData = typeof FormData !== 'undefined' && rest.body instanceof FormData;
+  if (rest.body && !isFormData && !h.has('Content-Type')) {
     h.set('Content-Type', 'application/json');
   }
   if (auth) {

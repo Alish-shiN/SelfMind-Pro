@@ -1,19 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { DecorBlobs } from "../components/DecorBlobs";
 import { colors } from "../theme/colors";
 import { getDashboardHome } from "../api/dashboard";
+import { getAccountInfo, resolveMediaUrl } from "../api/user";
 import { ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { formatMoodLine, moodEmoji } from "../utils/mood";
@@ -24,20 +17,25 @@ import type { HomeStackParamList } from "../navigation/types";
 type Props = NativeStackScreenProps<HomeStackParamList, "HomeMain">;
 
 export function HomeScreen({ navigation }: Props) {
-  const { signOut } = useAuth();
   const { t } = useTranslation();
+  const { signOut } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<Awaited<
     ReturnType<typeof getDashboardHome>
   > | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
     try {
       const d = await getDashboardHome();
       setData(d);
+      const account = await getAccountInfo().catch(() => null);
+      setAvatarUrl(resolveMediaUrl(account?.avatar_url));
+      setAvatarFailed(false);
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
         await signOut("sessionExpired");
@@ -112,10 +110,15 @@ export function HomeScreen({ navigation }: Props) {
 
         {data ? (
           <>
-            <Text style={styles.greeting}>
-              {t("homeGreetingPrefix")}{" "}
-              <Text style={styles.greetingBold}>{data.user.username}</Text>
-            </Text>
+            <View style={styles.greetingRow}>
+              <Text style={styles.greeting}>
+                {t("homeGreetingPrefix")}{" "}
+                <Text style={styles.greetingBold}>{data.user.username}</Text>
+              </Text>
+              <Pressable style={styles.avatarCircle} onPress={() => navigation.navigate("Notifications")}>
+                <Ionicons name="notifications-outline" size={20} color={colors.text} />
+              </Pressable>
+            </View>
 
             <Text style={styles.moodLine}>{moodLine}</Text>
 
@@ -158,9 +161,9 @@ export function HomeScreen({ navigation }: Props) {
 
             <Pressable
               style={styles.actionBtn}
-              onPress={() => navigation.navigate("AiChat")}
+              onPress={() => navigation.navigate("AiChatHistory")}
             >
-              <Text style={styles.actionLabel}>{t("aiChat")}</Text>
+              <Text style={styles.actionLabel}>Chats</Text>
               <View style={styles.actionIcon}>
                 <Ionicons name="arrow-forward" size={18} color={colors.white} />
               </View>
@@ -174,10 +177,6 @@ export function HomeScreen({ navigation }: Props) {
               <View style={styles.actionIcon}>
                 <Ionicons name="arrow-forward" size={18} color={colors.white} />
               </View>
-            </Pressable>
-
-            <Pressable style={styles.signOut} onPress={() => signOut()}>
-              <Text style={styles.signOutText}>{t("signOut")}</Text>
             </Pressable>
           </>
         ) : null}
@@ -222,6 +221,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 16,
   },
+  greetingRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 8, marginBottom: 16 },
+  avatarCircle: { width: 42, height: 42, borderRadius: 21, backgroundColor: "#F5F7FA", borderWidth: 1, borderColor: colors.coral, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   greetingBold: {
     fontWeight: "700",
   },

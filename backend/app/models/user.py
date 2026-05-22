@@ -53,6 +53,7 @@ class User(TimestampMixin, Base):
             "privacy_notice_accepted": False,
             "privacy_notice_version": None,
             "privacy_notice_accepted_at": None,
+            "private_account": True,
         },
         nullable=False,
     )

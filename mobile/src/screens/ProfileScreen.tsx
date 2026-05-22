@@ -16,7 +16,7 @@ import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import type { RootStackParamList } from "../navigation/types";
 import { ApiError } from "../api/client";
-import { getCurrentUser, getUserPreferences, UserPreferences } from "../api/user";
+import { getAccountInfo, getCurrentUser, getUserPreferences, resolveMediaUrl, UserPreferences } from "../api/user";
 import { getReminderPreferences, ReminderPreference } from "../api/reminders";
 import { scheduleReminderPreferences } from "../lib/notifications";
 import { supportedLanguages, useTranslation } from "../i18n/I18nContext";
@@ -89,19 +89,24 @@ export function ProfileScreen({ navigation, route }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [reminders, setReminders] = useState<ReminderPreference | null>(null);
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
     setLoading(true);
     try {
-      const [u, reminderPrefs, userPrefs] = await Promise.all([
+      const [u, reminderPrefs, userPrefs, accountInfo] = await Promise.all([
         getCurrentUser(),
         getReminderPreferences(),
         getUserPreferences(),
+        getAccountInfo().catch(() => null),
       ]);
       setUser(u);
       setReminders(reminderPrefs);
       setPreferences(userPrefs);
+      setAvatarUrl(resolveMediaUrl(accountInfo?.avatar_url));
+      setAvatarFailed(false);
       void scheduleReminderPreferences(reminderPrefs);
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
@@ -181,7 +186,11 @@ export function ProfileScreen({ navigation, route }: Props) {
           <>
             <View style={styles.heroCard}>
               <View style={styles.avatarCircle}>
-                <Text style={styles.avatarText}>{initials}</Text>
+                {avatarUrl && !avatarFailed ? (
+                  <Image source={{ uri: avatarUrl }} style={styles.avatarImage} onError={() => setAvatarFailed(true)} />
+                ) : (
+                  <Text style={styles.avatarText}>{initials}</Text>
+                )}
               </View>
               <Text style={styles.name}>{user.username}</Text>
               <Text style={styles.tagline}>{t("wellnessCompanion")}</Text>
@@ -190,11 +199,7 @@ export function ProfileScreen({ navigation, route }: Props) {
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>{t("account")}</Text>
               <View style={styles.infoCard}>
-                <HubRow icon="mail-outline" label={t("email")} value={user.email} />
-                <View style={styles.divider} />
-                <HubRow icon="person-outline" label={t("username")} value={user.username} />
-                <View style={styles.divider} />
-                <HubRow icon="calendar-outline" label={t("memberSince")} value={formatJoined(user.created_at)} />
+                <HubRow icon="person-circle-outline" label="Account information" value="Manage profile details and avatar" onPress={() => navigation.navigate("ProfileAccountInfo")} />
               </View>
             </View>
 
@@ -280,6 +285,7 @@ const styles = StyleSheet.create({
   retryText: { color: "#fff", fontWeight: "800", fontSize: 13 },
   heroCard: { backgroundColor: colors.white, borderRadius: 20, paddingVertical: 22, paddingHorizontal: 18, alignItems: "center", borderWidth: 1, borderColor: "#E8ECF4", marginBottom: 20 },
   avatarCircle: { width: 88, height: 88, borderRadius: 44, backgroundColor: "#F5F7FA", borderWidth: 2, borderColor: colors.coral, alignItems: "center", justifyContent: "center" },
+  avatarImage: { width: "100%", height: "100%", borderRadius: 44 },
   avatarText: { fontSize: 28, fontWeight: "900", color: colors.text },
   name: { marginTop: 14, fontSize: 22, fontWeight: "900", color: colors.text },
   tagline: { marginTop: 6, fontSize: 13, color: colors.textMuted, fontWeight: "600" },

@@ -8,6 +8,8 @@ class ProfileResponse(BaseModel):
     full_name: str | None = None
     bio: str | None = None
     avatar_url: str | None = None
+    date_of_birth: str | None = None
+    country: str | None = None
     created_at: datetime
     updated_at: datetime
 

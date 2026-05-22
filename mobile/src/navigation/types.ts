@@ -13,12 +13,16 @@ export type RootStackParamList = {
   ProfilePersonalization: undefined;
   ProfilePrivacyCenter: undefined;
   ProfileReminders: undefined;
+  ProfileAccountInfo: undefined;
 };
 
 export type HomeStackParamList = {
   HomeMain: undefined;
   AiDiary: { entryDate?: string } | undefined;
-  AiChat: undefined;
+  AiChatHistory: undefined;
+  AiChat: { sessionId: number; title?: string };
+  Notifications: undefined;
+  DirectChat: { conversationId: number; title: string };
   AiQuiz: undefined;
   Safety: undefined;
   Feature: { title: string };

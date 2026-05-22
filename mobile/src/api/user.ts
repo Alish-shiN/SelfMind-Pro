@@ -19,6 +19,7 @@ export type PrivacyPreferences = {
   privacy_notice_accepted: boolean;
   privacy_notice_version: string | null;
   privacy_notice_accepted_at: string | null;
+  private_account: boolean;
 };
 
 export type UserPreferences = {
@@ -46,6 +47,7 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
     privacy_notice_accepted: false,
     privacy_notice_version: null,
     privacy_notice_accepted_at: null,
+    private_account: true,
   },
   ai_tone: 'calm',
   onboarding_completed: false,
@@ -161,4 +163,54 @@ export function deleteAccount() {
     auth: true,
     body: JSON.stringify({ confirmation: 'DELETE' }),
   });
+}
+
+
+export type AccountInfo = { email: string; username: string; member_since: string; birthday: string | null; country: string | null; bio: string | null; avatar_url: string | null };
+export function getAccountInfo() { return apiFetch<AccountInfo>("/users/me/account", { auth: true }); }
+export function updateAccountInfo(payload: { birthday?: string | null; country?: string | null; bio?: string | null }) { return apiFetch<AccountInfo>("/users/me/account", { method: "PUT", auth: true, body: JSON.stringify(payload) }); }
+export async function uploadAvatar(uri: string, name: string, type: string) { const fd = new FormData(); fd.append("file", { uri, name, type } as any); return apiFetch<AccountInfo>("/users/me/avatar", { method: "POST", auth: true, body: fd as any }); }
+export type PublicMiniProfile = {
+  id: number;
+  username: string;
+  avatar_url: string | null;
+  country: string | null;
+  bio: string | null;
+  member_since: string;
+  private_account: boolean;
+  public_safe_preferences?: { community_profile_visibility?: string; anonymous_community_default?: boolean } | null;
+  public_safe_stats?: { goals_count?: number } | null;
+  friends_count: number;
+};
+export function getPublicProfile(userId: number){ return apiFetch<PublicMiniProfile>(`/users/public-profile/${userId}`, { auth: true }); }
+export function sendFriendRequest(target_user_id: number) {
+  return apiFetch<{ status: string; request_id: number }>("/users/friends/requests", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify({ target_user_id }),
+  });
+}
+export type InAppNotification = {
+  id: number;
+  user_id: number;
+  kind: string;
+  title: string;
+  body: string;
+  status: "read" | "unread";
+  created_at: string;
+};
+export function getMyNotifications() {
+  return apiFetch<InAppNotification[]>("/users/notifications", { auth: true });
+}
+export function updateNotificationStatus(notificationId: number, status: "read" | "unread") {
+  return apiFetch<{ id: number; status: "read" | "unread" }>(`/users/notifications/${notificationId}`, {
+    method: "PATCH",
+    auth: true,
+    body: JSON.stringify({ status }),
+  });
+}
+export function resolveMediaUrl(url?: string | null) {
+  if (!url) return null;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return `${API_BASE_URL}${url}`;
 }

@@ -26,3 +26,12 @@ yarn-error.log*
 backend/.env
 backend/.env.*
 !backend/.env.example
+
+# Uploaded user files
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Wrong/accidental upload folders
+uploads/
+mobile/uploads/
+backend/backend/

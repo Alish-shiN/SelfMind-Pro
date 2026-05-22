@@ -183,6 +183,12 @@ export function ProfilePrivacyCenterScreen({ navigation }: Props) {
 
           <Text style={styles.sectionLabel}>{t("privacyDefaults")}</Text>
           <ToggleRow
+            label="Private account"
+            description="Hide avatar and display name on public profile. Limited info only: country, bio, member since."
+            value={draft.privacy_preferences.private_account}
+            onPress={() => setPrivacy({ private_account: !draft.privacy_preferences.private_account })}
+          />
+          <ToggleRow
             label={t("privateDiaryDefault")}
             description={t("privateDiaryDefaultDesc")}
             value={draft.privacy_preferences.journal_private_default}

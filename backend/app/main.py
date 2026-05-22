@@ -1,7 +1,9 @@
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from pathlib import Path
 
 from app.api.v1.api import api_router
 from app.core.database import SessionLocal
@@ -12,12 +14,21 @@ app = FastAPI(title=settings.PROJECT_NAME)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,
+    # CORS spec forbids wildcard origins when credentials are enabled.
+    # Keep credentials enabled only for explicit origin lists.
     allow_credentials="*" not in settings.BACKEND_CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+UPLOADS_DIR = BACKEND_ROOT / "uploads"
+(UPLOADS_DIR / "avatars").mkdir(parents=True, exist_ok=True)
+(UPLOADS_DIR / "community").mkdir(parents=True, exist_ok=True)
+
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 
 @app.get("/")

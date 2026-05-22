@@ -93,6 +93,7 @@ export function PersonalizationOnboardingScreen({ onDone }: Props) {
                 privacy_notice_accepted: false,
                 privacy_notice_version: null,
                 privacy_notice_accepted_at: null,
+                private_account: true,
               },
               ai_tone: tone,
               onboarding_completed: true,

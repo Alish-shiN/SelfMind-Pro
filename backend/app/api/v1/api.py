@@ -15,6 +15,7 @@ from app.api.v1.endpoints import (
     admin,
     reminders,
     safety,
+    dm,
 )
 
 api_router = APIRouter()
@@ -32,3 +33,4 @@ api_router.include_router(ai_quiz.router)
 api_router.include_router(admin.router)
 api_router.include_router(reminders.router)
 api_router.include_router(safety.router)
+api_router.include_router(dm.router)

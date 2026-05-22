@@ -21,6 +21,7 @@ class ChatSessionResponse(BaseModel):
 
 class ChatMessageCreate(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
+    session_title: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class ChatMessageResponse(BaseModel):

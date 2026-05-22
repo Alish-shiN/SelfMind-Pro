@@ -46,6 +46,7 @@ class CommunityPostCreate(BaseModel):
     is_anonymous: bool = False
     support_space: SupportSpace = "general"
     topic_tags: list[str] = Field(default_factory=list, max_length=5)
+    image_url: str | None = Field(default=None, max_length=500)
 
 
 class CommunityCommentCreate(BaseModel):
@@ -98,6 +99,8 @@ class CommunityPostResponse(BaseModel):
     is_anonymous: bool
     support_space: str
     topic_tags: list[str]
+    image_url: str | None = None
+    image_url: str | None = None
     author: CommunityAuthor
     comments_count: int
     reactions: CommunityReactionSummary

@@ -19,3 +19,7 @@ from app.models.community_reaction import CommunityReaction
 
 from app.models.goal import Goal
 from app.models.goal_completion import GoalCompletion
+from app.models.friend_request import FriendRequest
+from app.models.in_app_notification import InAppNotification
+from app.models.direct_conversation import DirectConversation
+from app.models.direct_message import DirectMessage
