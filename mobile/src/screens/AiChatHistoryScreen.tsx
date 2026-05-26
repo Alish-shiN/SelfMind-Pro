@@ -12,59 +12,106 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { ApiError } from "../api/client";
-import { createChatSession, getChatSessionDetail, getMyChatSessions, type ChatSessionResponse } from "../api/chat";
-import { listDirectConversations } from "../api/dm";
+import {
+  createChatSession,
+  getChatSessionDetail,
+  getMyChatSessions,
+  type ChatSessionResponse,
+} from "../api/chat";
+import { listDirectConversations, type DirectConversation } from "../api/dm";
 import { useAuth } from "../context/AuthContext";
+import { useTranslation } from "../i18n/I18nContext";
 import type { HomeStackParamList } from "../navigation/types";
 import { colors } from "../theme/colors";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "AiChatHistory">;
 
-type SessionListItem = ChatSessionResponse & { last_message_preview?: string | null; message_count?: number };
+type SessionListItem = ChatSessionResponse & {
+  last_message_preview?: string | null;
+  message_count?: number;
+};
 
-function formatDate(value: string) {
+function formatDate(value?: string | null) {
+  if (!value) return "";
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return `${date.toLocaleDateString()} · ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+
+  return `${date.toLocaleDateString()} · ${date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
 }
 
 export function AiChatHistoryScreen({ navigation }: Props) {
   const { signOut } = useAuth();
+  const { t } = useTranslation();
+
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
+  const [directConversations, setDirectConversations] = useState<
+    DirectConversation[]
+  >([]);
+
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [directConversations, setDirectConversations] = useState<any[]>([]);
 
-  const loadSessions = useCallback(async (pullToRefresh = false) => {
-    try {
-      if (pullToRefresh) setRefreshing(true);
-      else setLoading(true);
-      setError(null);
-      const [result, dmConvs] = await Promise.all([getMyChatSessions(), listDirectConversations()]);
-      const enriched = await Promise.all(result.map(async (session) => {
-        try {
-          const detail = await getChatSessionDetail(session.id);
-          const last = detail.messages[detail.messages.length - 1];
-          return { ...session, last_message_preview: last?.content ?? null, message_count: detail.messages.length };
-        } catch {
-          return { ...session, last_message_preview: null, message_count: undefined };
+  const loadSessions = useCallback(
+    async (pullToRefresh = false) => {
+      try {
+        if (pullToRefresh) {
+          setRefreshing(true);
+        } else {
+          setLoading(true);
         }
-      }));
-      setSessions(enriched as SessionListItem[]);
-      setDirectConversations(dmConvs);
-    } catch (e) {
-      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
-        await signOut("sessionExpired");
-        return;
+
+        setError(null);
+
+        const [result, dmConvs] = await Promise.all([
+          getMyChatSessions(),
+          listDirectConversations(),
+        ]);
+
+        const enriched = await Promise.all(
+          result.map(async (session) => {
+            try {
+              const detail = await getChatSessionDetail(session.id);
+              const last = detail.messages[detail.messages.length - 1];
+
+              return {
+                ...session,
+                last_message_preview: last?.content ?? null,
+                message_count: detail.messages.length,
+              };
+            } catch {
+              return {
+                ...session,
+                last_message_preview: null,
+                message_count: undefined,
+              };
+            }
+          }),
+        );
+
+        setSessions(enriched as SessionListItem[]);
+        setDirectConversations(dmConvs);
+      } catch (e) {
+        if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+          await signOut("sessionExpired");
+          return;
+        }
+
+        setError(
+          e instanceof ApiError ? e.message : "Could not load chat history.",
+        );
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-      setError(e instanceof ApiError ? e.message : "Could not load chat history.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [signOut]);
+    },
+    [signOut],
+  );
 
   useEffect(() => {
     loadSessions();
@@ -73,77 +120,168 @@ export function AiChatHistoryScreen({ navigation }: Props) {
   const onNewChat = useCallback(async () => {
     try {
       setCreating(true);
+
       const session = await createChatSession("New conversation");
-      navigation.navigate("AiChat", { sessionId: session.id, title: session.title });
+
+      navigation.navigate("AiChat", {
+        sessionId: session.id,
+        title: session.title,
+      });
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
         await signOut("sessionExpired");
         return;
       }
+
       setError(e instanceof ApiError ? e.message : "Could not create a new chat.");
     } finally {
       setCreating(false);
     }
   }, [navigation, signOut]);
 
+  const hasDirectConversations = directConversations.length > 0;
+  const hasAiSessions = sessions.length > 0;
+  const isCompletelyEmpty = !hasDirectConversations && !hasAiSessions;
+
   return (
     <SafeAreaView style={styles.safe} edges={["top"]}>
       <View style={styles.header}>
-        <Text style={styles.title}>Chat</Text>
-        <Pressable style={[styles.newButton, creating && { opacity: 0.7 }]} onPress={onNewChat} disabled={creating}>
-          {creating ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="add" size={18} color="#fff" />}
-          <Text style={styles.newButtonText}>New Chat</Text>
+        <Text style={styles.title}>{t("chat")}</Text>
+
+        <Pressable
+          style={[styles.newButton, creating && styles.disabledButton]}
+          onPress={onNewChat}
+          disabled={creating}
+        >
+          {creating ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Ionicons name="add" size={18} color="#fff" />
+          )}
+
+          <Text style={styles.newButtonText}>{t("startConversation")}</Text>
         </Pressable>
       </View>
 
       {error ? (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
+
           <Pressable style={styles.retryButton} onPress={() => loadSessions()}>
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>{t("retry")}</Text>
           </Pressable>
         </View>
       ) : null}
 
       {loading ? (
-        <View style={styles.centered}><ActivityIndicator size="large" color={colors.coral} /></View>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={colors.coral} />
+        </View>
       ) : (
         <FlatList
           data={sessions}
           keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={sessions.length === 0 ? styles.emptyList : styles.list}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadSessions(true)} tintColor={colors.coral} />}
-          ListHeaderComponent={directConversations.length ? (
-            <View style={{ paddingHorizontal: 16, paddingTop: 8, gap: 10 }}>
-              <Text style={{ color: colors.textMuted, fontWeight: "800" }}>Direct messages</Text>
-              {directConversations.map((conv) => (
-                <Pressable key={conv.id} style={styles.chatCard} onPress={() => navigation.navigate("DirectChat", { conversationId: conv.id, title: conv.other_username })}>
-                  <Text style={styles.chatTitle}>{conv.other_username}</Text>
-                  <Text style={styles.chatPreview} numberOfLines={1}>Tap to open conversation</Text>
-                  <Text style={styles.chatDate}>{formatDate(conv.updated_at || conv.created_at)}</Text>
-                </Pressable>
-              ))}
-              <Text style={{ color: colors.textMuted, fontWeight: "800", marginTop: 8 }}>AI chat sessions</Text>
+          contentContainerStyle={
+            isCompletelyEmpty ? styles.emptyList : styles.list
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => loadSessions(true)}
+              tintColor={colors.coral}
+            />
+          }
+          ListHeaderComponent={
+            <View style={styles.listHeader}>
+              {hasDirectConversations ? (
+                <>
+                  <Text style={styles.sectionTitle}>
+                    {t("directMessages")}
+                  </Text>
+
+                  {directConversations.map((conv) => (
+                    <Pressable
+                      key={conv.id}
+                      style={styles.chatCard}
+                      onPress={() =>
+                        navigation.navigate("DirectChat", {
+                          conversationId: conv.id,
+                          title: conv.other_username,
+                        })
+                      }
+                    >
+                      <Text style={styles.chatTitle}>
+                        {conv.other_username}
+                      </Text>
+
+                      <Text style={styles.chatPreview} numberOfLines={1}>
+                        {conv.last_message_preview || t("noMessagesYet")}
+                      </Text>
+
+                      <Text style={styles.chatDate}>
+                        {formatDate(conv.updated_at || conv.created_at)}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </>
+              ) : null}
+
+              {hasAiSessions || hasDirectConversations ? (
+                <Text
+                  style={[
+                    styles.sectionTitle,
+                    hasDirectConversations && styles.aiSectionTitle,
+                  ]}
+                >
+                  {t("aiChatSessions")}
+                </Text>
+              ) : null}
             </View>
-          ) : null}
+          }
           renderItem={({ item }) => (
             <Pressable
               style={styles.chatCard}
-              onPress={() => navigation.navigate("AiChat", { sessionId: item.id, title: item.title })}
+              onPress={() =>
+                navigation.navigate("AiChat", {
+                  sessionId: item.id,
+                  title: item.title,
+                })
+              }
             >
-              <Text style={styles.chatTitle}>{item.title || "Conversation"}</Text>
-              <Text style={styles.chatPreview} numberOfLines={1}>
-                {item.last_message_preview || (item.message_count === 0 ? "No messages yet" : "Tap to open conversation")}
+              <Text style={styles.chatTitle}>
+                {item.title || t("startConversation")}
               </Text>
-              <Text style={styles.chatDate}>{formatDate(item.updated_at || item.created_at)}</Text>
+
+              <Text style={styles.chatPreview} numberOfLines={1}>
+                {item.last_message_preview ||
+                  (item.message_count === 0
+                    ? t("noMessagesYet")
+                    : t("tapToOpenConversation"))}
+              </Text>
+
+              <Text style={styles.chatDate}>
+                {formatDate(item.updated_at || item.created_at)}
+              </Text>
             </Pressable>
           )}
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Ionicons name="chatbubble-ellipses-outline" size={42} color={colors.textMuted} />
-              <Text style={styles.emptyTitle}>Start your first conversation</Text>
-              <Text style={styles.emptySubtitle}>Your AI chat sessions will appear here.</Text>
-            </View>
+            isCompletelyEmpty ? (
+              <View style={styles.emptyState}>
+                <Ionicons
+                  name="chatbubble-ellipses-outline"
+                  size={42}
+                  color={colors.textMuted}
+                />
+
+                <Text style={styles.emptyTitle}>
+                  {t("startFirstConversation")}
+                </Text>
+
+                <Text style={styles.emptySubtitle}>
+                  {t("aiChatSessionsWillAppear")}
+                </Text>
+              </View>
+            ) : null
           }
         />
       )}
@@ -152,23 +290,158 @@ export function AiChatHistoryScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.backgroundSoft },
-  header: { paddingHorizontal: 16, paddingVertical: 12, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  title: { fontSize: 24, fontWeight: "900", color: colors.text },
-  newButton: { backgroundColor: colors.coral, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, flexDirection: "row", alignItems: "center", gap: 6 },
-  newButtonText: { color: "#fff", fontWeight: "800", fontSize: 13 },
-  errorBox: { marginHorizontal: 16, marginBottom: 8, padding: 12, borderRadius: 12, backgroundColor: "#FFE5E5" },
-  errorText: { color: "#B91C1C", fontWeight: "700", marginBottom: 8 },
-  retryButton: { alignSelf: "flex-start", backgroundColor: colors.coral, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
-  retryText: { color: "#fff", fontWeight: "800" },
-  centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  list: { padding: 16, gap: 10 },
-  emptyList: { flexGrow: 1, justifyContent: "center", padding: 16 },
-  chatCard: { backgroundColor: colors.white, borderRadius: 14, borderWidth: 1, borderColor: "#EEF2FF", padding: 14 },
-  chatTitle: { color: colors.text, fontWeight: "800", fontSize: 15, marginBottom: 4 },
-  chatPreview: { color: colors.textMuted, fontSize: 13, marginBottom: 8 },
-  chatDate: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
-  emptyState: { alignItems: "center" },
-  emptyTitle: { marginTop: 12, fontSize: 18, fontWeight: "900", color: colors.text },
-  emptySubtitle: { marginTop: 6, fontSize: 13, color: colors.textMuted, textAlign: "center" },
+  safe: {
+    flex: 1,
+    backgroundColor: colors.backgroundSoft,
+  },
+
+  header: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  title: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: colors.text,
+  },
+
+  newButton: {
+    backgroundColor: colors.coral,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 999,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+
+  disabledButton: {
+    opacity: 0.7,
+  },
+
+  newButtonText: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 13,
+  },
+
+  errorBox: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#FFE5E5",
+  },
+
+  errorText: {
+    color: "#B91C1C",
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+
+  retryButton: {
+    alignSelf: "flex-start",
+    backgroundColor: colors.coral,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+
+  retryText: {
+    color: "#fff",
+    fontWeight: "800",
+  },
+
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  list: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 24,
+    gap: 10,
+  },
+
+  emptyList: {
+    flexGrow: 1,
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+
+  listHeader: {
+    gap: 10,
+    paddingTop: 8,
+    marginBottom: 10,
+  },
+
+  sectionTitle: {
+    color: colors.textMuted,
+    fontWeight: "800",
+  },
+
+  aiSectionTitle: {
+    marginTop: 8,
+  },
+
+  chatCard: {
+    backgroundColor: colors.white,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#EEF2FF",
+    padding: 14,
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    elevation: 1,
+  },
+
+  chatTitle: {
+    color: colors.text,
+    fontWeight: "800",
+    fontSize: 15,
+    marginBottom: 4,
+  },
+
+  chatPreview: {
+    color: colors.textMuted,
+    fontSize: 13,
+    marginBottom: 8,
+  },
+
+  chatDate: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
+  emptyState: {
+    alignItems: "center",
+  },
+
+  emptyTitle: {
+    marginTop: 12,
+    fontSize: 18,
+    fontWeight: "900",
+    color: colors.text,
+  },
+
+  emptySubtitle: {
+    marginTop: 6,
+    fontSize: 13,
+    color: colors.textMuted,
+    textAlign: "center",
+  },
 });

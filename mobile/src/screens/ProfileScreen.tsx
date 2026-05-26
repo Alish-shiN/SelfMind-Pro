@@ -157,15 +157,6 @@ export function ProfileScreen({ navigation, route }: Props) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.brandRow}>
-          <Image
-            source={require("../../assets/selfmind-logo.png")}
-            style={styles.brandMark}
-            resizeMode="contain"
-            accessibilityLabel="SelfMindPro"
-          />
-        </View>
-
         {loading ? (
           <View style={styles.loadingBlock}>
             <ActivityIndicator size="large" color={colors.coral} />
@@ -275,8 +266,6 @@ const styles = StyleSheet.create({
   topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 10 },
   title: { fontSize: 17, fontWeight: "800", color: colors.text },
   scrollContent: { paddingBottom: 32, paddingHorizontal: 16 },
-  brandRow: { alignItems: "center", marginTop: 4, marginBottom: 8 },
-  brandMark: { width: 160, height: 72, opacity: 0.95 },
   loadingBlock: { alignItems: "center", paddingVertical: 28, gap: 12 },
   loadingHint: { fontSize: 14, color: colors.textMuted, fontWeight: "600" },
   errBox: { backgroundColor: "#FFE5E5", borderRadius: 16, padding: 14, marginBottom: 12 },

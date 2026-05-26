@@ -12,11 +12,19 @@ import { useAuth } from "../context/AuthContext";
 import { formatMoodLine, moodEmoji } from "../utils/mood";
 import { useTranslation } from "../i18n/I18nContext";
 import { shouldShowImmediateHelp } from "../lib/safetySupport";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { OfflineNotice } from "../components/OfflineNotice";
+import {
+  getNetworkOfflineState,
+  isOfflineLikeError,
+  withOfflineTimeout,
+} from "../services/offlineNetworkService";
 import type { HomeStackParamList } from "../navigation/types";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "HomeMain">;
 
 export function HomeScreen({ navigation }: Props) {
+  const HOME_CACHE_KEY = "home_dashboard_cache_v1";
   const { t } = useTranslation();
   const { signOut } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -27,23 +35,33 @@ export function HomeScreen({ navigation }: Props) {
   > | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const d = await getDashboardHome();
+      setOfflineNotice(null);
+      const d = await withOfflineTimeout(getDashboardHome());
       setData(d);
+      await AsyncStorage.setItem(HOME_CACHE_KEY, JSON.stringify(d));
       const account = await getAccountInfo().catch(() => null);
       setAvatarUrl(resolveMediaUrl(account?.avatar_url));
       setAvatarFailed(false);
     } catch (e) {
+      const cachedRaw = await AsyncStorage.getItem(HOME_CACHE_KEY);
+      if (cachedRaw) {
+        setData(JSON.parse(cachedRaw));
+        setOfflineNotice(t("offlineShowingSavedData"));
+      }
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
         await signOut("sessionExpired");
         setError(null);
         return;
       }
-      const msg =
-        e instanceof ApiError ? e.message : t("couldNotLoadDashboard");
+      const offlineState = await getNetworkOfflineState();
+      const msg = offlineState || isOfflineLikeError(e)
+        ? t("offlineShowingSavedData")
+        : e instanceof ApiError ? e.message : t("couldNotLoadDashboard");
       setError(msg);
     } finally {
       setLoading(false);
@@ -99,7 +117,8 @@ export function HomeScreen({ navigation }: Props) {
           </View>
         ) : null}
 
-        {error ? (
+        {offlineNotice ? <OfflineNotice message={offlineNotice} /> : null}
+        {error && !data ? (
           <View style={styles.errBox}>
             <Text style={styles.errText}>{error}</Text>
             <Pressable style={styles.retry} onPress={load}>
