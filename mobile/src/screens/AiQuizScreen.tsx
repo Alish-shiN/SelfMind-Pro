@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   Alert,
@@ -29,6 +30,12 @@ import {
 } from "../api/aiQuiz";
 import { createGoal } from "../api/goals";
 import { languageLocales, useTranslation } from "../i18n/I18nContext";
+import { OfflineNotice } from "../components/OfflineNotice";
+import {
+  getNetworkOfflineState,
+  isOfflineLikeError,
+  withOfflineTimeout,
+} from "../services/offlineNetworkService";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "AiQuiz">;
 type ScreenMode = "landing" | "taking" | "result";
@@ -73,6 +80,7 @@ function titleCase(value?: string | null) {
 }
 
 export function AiQuizScreen({ navigation }: Props) {
+  const QUIZ_CACHE_KEY = "ai_quiz_cache_v1";
   const { signOut } = useAuth();
   const { t, language } = useTranslation();
   const locale = languageLocales[language as keyof typeof languageLocales];
@@ -85,6 +93,7 @@ export function AiQuizScreen({ navigation }: Props) {
   const [loadingResult, setLoadingResult] = useState(false);
   const [creatingGoal, setCreatingGoal] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
 
   const [quizTypes, setQuizTypes] = useState<AiQuizType[]>([]);
   const [history, setHistory] = useState<AiQuizHistoryItem[]>([]);
@@ -119,14 +128,30 @@ export function AiQuizScreen({ navigation }: Props) {
   const loadLanding = useCallback(async () => {
     setError(null);
     try {
+      setOfflineNotice(null);
       const [types, completed] = await Promise.all([
-        getAiQuizTypes(),
-        getAiQuizHistory(),
+        withOfflineTimeout(getAiQuizTypes()),
+        withOfflineTimeout(getAiQuizHistory()),
       ]);
       setQuizTypes(types);
       setHistory(completed);
+      await AsyncStorage.setItem(
+        QUIZ_CACHE_KEY,
+        JSON.stringify({ quizTypes: types, history: completed }),
+      );
       if (!selectedQuizType && types[0]) setSelectedQuizType(types[0].key);
     } catch (e) {
+      const cached = await AsyncStorage.getItem(QUIZ_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setQuizTypes(parsed.quizTypes ?? []);
+        setHistory(parsed.history ?? []);
+        setOfflineNotice(t("offlineShowingSavedData"));
+      }
+      if (isOfflineLikeError(e)) {
+        setError(cached ? null : t("offlineShowingSavedData"));
+        return;
+      }
       await handleAuthError(e, t("couldNotLoadQuiz"));
     } finally {
       setLoadingLanding(false);
@@ -147,6 +172,11 @@ export function AiQuizScreen({ navigation }: Props) {
     async (quizType?: string) => {
       const typeToStart =
         quizType || selectedQuizType || quizTypes[0]?.key || "stress";
+      const isOffline = await getNetworkOfflineState();
+      if (isOffline) {
+        Alert.alert(t("onlineRequired"), t("featureRequiresConnection"));
+        return;
+      }
       setError(null);
       setGenerating(true);
       setResult(null);
@@ -167,6 +197,11 @@ export function AiQuizScreen({ navigation }: Props) {
 
   const submit = useCallback(async () => {
     if (!session) return;
+    const isOffline = await getNetworkOfflineState();
+    if (isOffline) {
+      Alert.alert(t("onlineRequired"), t("featureRequiresConnection"));
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -285,7 +320,8 @@ export function AiQuizScreen({ navigation }: Props) {
           <Text style={styles.disclaimerText}>{t("quizDisclaimer")}</Text>
         </View>
 
-        {error ? (
+      {offlineNotice ? <OfflineNotice message={offlineNotice} /> : null}
+      {error ? (
           <View style={styles.errBox}>
             <Text style={styles.errText}>{error}</Text>
             <Pressable

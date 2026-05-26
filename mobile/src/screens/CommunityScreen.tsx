@@ -132,6 +132,19 @@ const getFeed = (supportSpace?: string, limit = 20, offset = 0) => {
     { method: "GET", auth: true },
   );
 };
+type FeedSort = "newest" | "popular";
+function totalReactions(reactions: ReactionSummary) {
+  return (reactions.support ?? 0) + (reactions.me_too ?? 0) + (reactions.sending_strength ?? 0) + (reactions.helpful ?? 0);
+}
+function sortPosts(items: CommunityPost[], sort: FeedSort) {
+  const copy = [...items];
+  if (sort === "popular") {
+    copy.sort((a, b) => totalReactions(b.reactions) - totalReactions(a.reactions) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return copy;
+  }
+  copy.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  return copy;
+}
 const getPostDetail = (id: number) =>
   apiFetch<PostDetail>(`/community/posts/${id}`, { method: "GET", auth: true });
 const createPost = (
@@ -564,7 +577,7 @@ function PostCard({
 }) {
   const { t } = useTranslation();
   const [avatarFailed, setAvatarFailed] = useState(false);
-  const avatarUrl = post.is_anonymous ? null : resolveMediaUrl(post.author.avatar_url);
+  const avatarUrl = resolveMediaUrl(post.author.avatar_url);
   return (
     <Pressable style={cardStyles.card} onPress={onPress}>
       <View style={cardStyles.header}>
@@ -592,7 +605,7 @@ function PostCard({
         ) : null}
       </View>
       <Text style={cardStyles.content}>{post.content}</Text>
-      {post.image_url ? <Image source={{ uri: resolveMediaUrl(post.image_url) ?? undefined }} style={cardStyles.postImage} resizeMode="contain" /> : null}
+      {post.image_url ? <Image source={{ uri: resolveMediaUrl(post.image_url) ?? undefined }} style={cardStyles.postImage} resizeMode="cover" /> : null}
       {post.topic_tags.length > 0 ? (
         <View style={cardStyles.tagsRow}>
           {post.topic_tags.map((tag) => (
@@ -742,7 +755,7 @@ function PostDetailModal({
                 </Text>
                 <Text style={cardStyles.content}>{detail.content}</Text>
                 {detail.image_url ? (
-                  <Image source={{ uri: resolveMediaUrl(detail.image_url) ?? undefined }} style={cardStyles.postImage} resizeMode="contain" />
+                  <Image source={{ uri: resolveMediaUrl(detail.image_url) ?? undefined }} style={cardStyles.postImage} resizeMode="cover" />
                 ) : null}
                 <ReactionRow
                   reactions={detail.reactions}
@@ -761,9 +774,16 @@ function PostDetailModal({
               ) : null}
               {detail.comments.map((comment) => (
                 <View key={comment.id} style={modalStyles.commentCard}>
-                  <Text style={modalStyles.commentAuthor}>
-                    {comment.author.username} · {timeAgo(comment.created_at, t)}
-                  </Text>
+                  <View style={modalStyles.commentAuthorRow}>
+                    <View style={cardStyles.avatar}>
+                      {resolveMediaUrl(comment.author.avatar_url) ? (
+                        <Image source={{ uri: resolveMediaUrl(comment.author.avatar_url) ?? undefined }} style={cardStyles.avatarImg} />
+                      ) : (
+                        <Text style={cardStyles.avatarText}>{comment.author.username?.[0]?.toUpperCase() || "?"}</Text>
+                      )}
+                    </View>
+                    <Text style={modalStyles.commentAuthor}>{comment.author.username} · {timeAgo(comment.created_at, t)}</Text>
+                  </View>
                   <Text style={modalStyles.commentContent}>
                     {comment.content}
                   </Text>
@@ -840,6 +860,7 @@ function PostDetailModal({
 export function CommunityScreen({ navigation }: any) {
   const { t } = useTranslation();
   const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const [feedSort, setFeedSort] = useState<FeedSort>("newest");
   const [guidelines, setGuidelines] = useState<Guidelines | null>(null);
   const [currentUser, setCurrentUser] = useState<UserResponse | null>(null);
   const [defaultAnonymous, setDefaultAnonymous] = useState(false);
@@ -878,7 +899,7 @@ export function CommunityScreen({ navigation }: any) {
         getUserPreferences().catch(() => null),
       ]);
       setGuidelines(guideData);
-      setPosts(feedData);
+      setPosts(sortPosts(feedData, feedSort));
       setActivePostReactions(
         feedData.reduce<Record<number, ReactionState>>((state, post) => {
           state[post.id] = reactionStateFromList(post.my_reactions);
@@ -896,7 +917,7 @@ export function CommunityScreen({ navigation }: any) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedSpace, t]);
+  }, [feedSort, selectedSpace, t]);
 
   useEffect(() => {
     load();
@@ -1030,6 +1051,15 @@ export function CommunityScreen({ navigation }: any) {
             </Pressable>
           ))}
         </ScrollView>
+      </View>
+      <View style={styles.sortRow}>
+        <Text style={styles.sortLabel}>{t("sortPosts")}</Text>
+        <Pressable style={[styles.sortChip, feedSort === "newest" && styles.sortChipActive]} onPress={() => setFeedSort("newest")}>
+          <Text style={[styles.sortChipText, feedSort === "newest" && styles.sortChipTextActive]}>{t("newest")}</Text>
+        </Pressable>
+        <Pressable style={[styles.sortChip, feedSort === "popular" && styles.sortChipActive]} onPress={() => setFeedSort("popular")}>
+          <Text style={[styles.sortChipText, feedSort === "popular" && styles.sortChipTextActive]}>{t("mostPopular")}</Text>
+        </Pressable>
       </View>
 
       {loading ? (
@@ -1243,7 +1273,7 @@ const cardStyles = StyleSheet.create({
   },
   anonText: { fontSize: 11, color: colors.textMuted },
   content: { fontSize: 14, color: colors.text, lineHeight: 21 },
-  postImage: { width: "100%", minHeight: 220, maxHeight: 420, borderRadius: 12, marginTop: 10, backgroundColor: "#F3F4F6" },
+  postImage: { width: "100%", minHeight: 220, maxHeight: 420, marginTop: 10 },
   tagsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 },
   tag: {
     backgroundColor: "#F3EEFF",
@@ -1451,6 +1481,7 @@ const modalStyles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 6,
   },
+  commentAuthorRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
   commentContent: { color: colors.text, fontSize: 14, lineHeight: 20 },
   commentActions: { flexDirection: "row", gap: 14, marginTop: 8 },
   actionText: { color: colors.textMuted, fontSize: 12, fontWeight: "700" },
@@ -1525,6 +1556,12 @@ const styles = StyleSheet.create({
   bannerSub: { fontSize: 13, color: colors.textMuted, lineHeight: 18 },
   bannerEmoji: { fontSize: 40, marginLeft: 8 },
   spacesRow: { marginBottom: 12 },
+  sortRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10, paddingHorizontal: 20 },
+  sortLabel: { color: colors.textMuted, fontWeight: "700", fontSize: 12 },
+  sortChip: { backgroundColor: colors.white, borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
+  sortChipActive: { backgroundColor: "#FFF0EE", borderColor: colors.coral },
+  sortChipText: { color: colors.textMuted, fontWeight: "700", fontSize: 12 },
+  sortChipTextActive: { color: colors.coral, fontWeight: "900" },
   spacesScroll: { paddingHorizontal: 20, gap: 8 },
   spaceFilter: {
     backgroundColor: colors.white,

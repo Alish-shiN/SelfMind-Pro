@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -18,6 +18,20 @@ import { Ionicons } from "@expo/vector-icons";
 import { ApiError, apiFetch } from "../api/client";
 import { checkSafetyText } from "../api/safety";
 import { getUserPreferences } from "../api/user";
+import {
+  getCachedServerJournalEntries,
+  getOfflineJournalEntries,
+  saveOfflineJournalEntry,
+  saveCachedServerJournalEntries,
+  syncPendingJournalEntries,
+} from "../services/offlineJournalService";
+import {
+  CREATE_API_TIMEOUT_MS,
+  SHORT_API_TIMEOUT_MS,
+  getNetworkOfflineState,
+  isOfflineLikeError,
+  withOfflineTimeout,
+} from "../services/offlineNetworkService";
 import { colors } from "../theme/colors";
 import { useAuth } from "../context/AuthContext";
 import { languageLocales, useTranslation } from "../i18n/I18nContext";
@@ -27,7 +41,7 @@ import type { HomeStackParamList } from "../navigation/types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type JournalEntry = {
-  id: number;
+  id: number | string;
   title: string;
   content: string;
   mood_score: number;
@@ -38,6 +52,9 @@ type JournalEntry = {
   notification_time: string | null;
   created_at: string;
   updated_at: string;
+  local_id?: string;
+  server_id?: number | null;
+  sync_status?: "pending" | "synced" | "failed";
 };
 
 type JournalAnalysis = {
@@ -279,6 +296,62 @@ function TimePickerModal({
   );
 }
 
+async function getNetworkOfflineState(): Promise<boolean | null> {
+  try {
+    const netInfo = require("@react-native-community/netinfo");
+    const state = await netInfo.fetch();
+
+    if (__DEV__) {
+      console.log("[offline-journal] netinfo state", {
+        isConnected: state?.isConnected,
+        isInternetReachable: state?.isInternetReachable,
+      });
+    }
+
+    if (state?.isConnected === false) return true;
+    if (state?.isInternetReachable === false) return true;
+    return false;
+  } catch {
+    return null;
+  }
+}
+
+const OFFLINE_API_TIMEOUT_MS = 2500;
+const CREATE_ENTRY_TIMEOUT_MS = 15000;
+
+function createOfflineTimeoutError() {
+  const error: any = new Error("Network request timeout");
+  error.status = 0;
+  return error;
+}
+
+function isOfflineLikeError(error: any) {
+  return (
+    error?.status === 0 ||
+    error?.name === "AbortError" ||
+    error?.message?.toLowerCase?.().includes("network request failed") ||
+    error?.message?.toLowerCase?.().includes("network request timeout") ||
+    error?.message?.toLowerCase?.().includes("failed to fetch")
+  );
+}
+
+function withOfflineTimeout<T>(
+  promise: Promise<T>,
+  ms = OFFLINE_API_TIMEOUT_MS,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(createOfflineTimeoutError());
+    }, ms);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId) clearTimeout(timeoutId);
+  });
+}
+
 // ─── New Entry Modal ──────────────────────────────────────────────────────────
 function NewEntryModal({
   visible,
@@ -302,6 +375,7 @@ function NewEntryModal({
   const [tagsRaw, setTagsRaw] = useState("");
   const [isPrivate, setIsPrivate] = useState(defaultPrivate);
   const [loading, setLoading] = useState(false);
+  const isCreatingRef = useRef(false);
 
   const reset = () => {
     setTitle("");
@@ -315,33 +389,69 @@ function NewEntryModal({
     if (visible) setIsPrivate(defaultPrivate);
   }, [defaultPrivate, visible]);
 
-  const submit = async () => {
+  const saveLocalAndNotify = async () => {
+    const now = new Date().toISOString();
+    await saveOfflineJournalEntry({
+      title: title.trim(),
+      content: content.trim(),
+      mood_score: moodScore,
+      tags: tagsRaw
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean),
+      is_private: isPrivate,
+      created_at: now,
+      updated_at: now,
+    });
+    reset();
+    onCreated();
+    Alert.alert(
+      t("saved"),
+      "Saved offline. It will sync when you are back online.",
+    );
+  };
+
+  const handleSubmit = async () => {
+    if (isCreatingRef.current || loading) return;
     if (!title.trim() || !content.trim()) {
       Alert.alert(t("missingFields"), t("missingEntryFields"));
       return;
     }
+    isCreatingRef.current = true;
     setLoading(true);
     try {
+      const isOffline = await getNetworkOfflineState();
+      if (__DEV__) console.log("[offline-journal] netinfo state", { isOffline });
+      if (isOffline) {
+        if (__DEV__) console.log("[offline-journal] create path", "offline-save");
+        await saveLocalAndNotify();
+        return;
+      }
+
       const tags = tagsRaw
         .split(",")
         .map((t) => t.trim())
         .filter(Boolean);
-      await createEntry({
-        title: title.trim(),
-        content: content.trim(),
-        mood_score: moodScore,
-        tags,
-        is_private: isPrivate,
-        push_notification_enabled: false,
-        notification_title: null,
-        notification_time: null,
-        entry_date: initialEntryDate,
-        language,
-      });
+      if (__DEV__) console.log("[offline-journal] create path", "online-create");
+      await withOfflineTimeout(
+        createEntry({
+          title: title.trim(),
+          content: content.trim(),
+          mood_score: moodScore,
+          tags,
+          is_private: isPrivate,
+          push_notification_enabled: false,
+          notification_title: null,
+          notification_time: null,
+          entry_date: initialEntryDate,
+          language,
+        }),
+        CREATE_API_TIMEOUT_MS,
+      );
 
-      const safetyResult = await checkSafetyText(
-        content.trim(),
-        moodScore,
+      const safetyResult = await withOfflineTimeout(
+        checkSafetyText(content.trim(), moodScore),
+        SHORT_API_TIMEOUT_MS,
       ).catch(() => null);
       reset();
       onCreated();
@@ -356,11 +466,22 @@ function NewEntryModal({
         ]);
       }
     } catch (e: any) {
-      Alert.alert(t("error"), e?.message ?? t("couldNotSaveEntry"));
+      const explicitOffline = await getNetworkOfflineState();
+      if (explicitOffline && isOfflineLikeError(e)) {
+        if (__DEV__) console.log("[offline-journal] create path", "offline-save");
+        await saveLocalAndNotify();
+      } else {
+        Alert.alert(t("saved"), t("connectionSlowShowingSavedData"));
+      }
     } finally {
+      isCreatingRef.current = false;
       setLoading(false);
     }
-  };
+  } finally {
+    isCreatingRef.current = false;
+    setLoading(false);
+  }
+};
 
   return (
     <Modal
@@ -385,7 +506,7 @@ function NewEntryModal({
             <Text style={neStyles.modalTitle}>{t("newEntry")}</Text>
             <Pressable
               style={[neStyles.saveBtn, loading && { opacity: 0.6 }]}
-              onPress={submit}
+              onPress={handleSubmit}
               disabled={loading}
             >
               {loading ? (
@@ -683,13 +804,19 @@ function EntryDetailModal({
   const [analysis, setAnalysis] = useState<JournalAnalysis | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
+  const isOfflineEntry = typeof entry.id !== "number";
 
   useEffect(() => {
-    getAnalysis(entry.id, language)
+    if (isOfflineEntry) {
+      setAnalysis(null);
+      setAnalysisLoading(false);
+      return;
+    }
+    getAnalysis(Number(entry.id), language)
       .then(setAnalysis)
       .catch(() => setAnalysis(null))
       .finally(() => setAnalysisLoading(false));
-  }, [entry.id, language]);
+  }, [entry.id, isOfflineEntry, language]);
 
   const handleDelete = () => {
     Alert.alert(t("deleteEntry"), t("deleteEntryConfirm"), [
@@ -700,7 +827,7 @@ function EntryDetailModal({
         onPress: async () => {
           setDeleting(true);
           try {
-            await deleteEntry(entry.id);
+            await deleteEntry(Number(entry.id));
             onDeleted();
           } catch (e: any) {
             Alert.alert(t("error"), e?.message ?? t("couldNotDelete"));
@@ -725,7 +852,11 @@ function EntryDetailModal({
           <Pressable onPress={onClose}>
             <Ionicons name="chevron-down" size={24} color={colors.text} />
           </Pressable>
-          <Pressable onPress={handleDelete} disabled={deleting}>
+          <Pressable
+            onPress={handleDelete}
+            disabled={deleting || isOfflineEntry}
+            style={isOfflineEntry ? { opacity: 0.4 } : undefined}
+          >
             {deleting ? (
               <ActivityIndicator size="small" color={colors.coral} />
             ) : (
@@ -793,6 +924,10 @@ function EntryDetailModal({
                 color={colors.coral}
                 style={{ marginVertical: 16 }}
               />
+            ) : isOfflineEntry ? (
+              <Text style={edStyles.noAnalysis}>
+                AI analysis will be available after this entry syncs.
+              </Text>
             ) : analysis ? (
               <View style={edStyles.analysisCard}>
                 <View style={edStyles.analysisRow}>
@@ -956,35 +1091,99 @@ export function AIDiaryScreen({ route, navigation }: Props) {
   const [showNew, setShowNew] = useState(false);
   const [selected, setSelected] = useState<JournalEntry | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
   const [defaultPrivate, setDefaultPrivate] = useState(true);
-
   const load = useCallback(async () => {
+    const offline = await getOfflineJournalEntries();
+    const mappedOffline: JournalEntry[] = offline
+      .filter((item) => item.sync_status !== "synced")
+      .map((item) => ({
+        id: item.local_id,
+        local_id: item.local_id,
+        server_id: item.server_id,
+        title: item.title,
+        content: item.content,
+        mood_score: item.mood_score,
+        tags: item.tags,
+        is_private: item.is_private,
+        push_notification_enabled: false,
+        notification_title: null,
+        notification_time: null,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+        sync_status: item.sync_status,
+      }));
     try {
       setError(null);
+      setOfflineNotice(null);
+      void syncPendingJournalEntries(
+        (payload) => createEntry(payload).then((created) => ({ id: Number(created.id) })),
+        language,
+      );
       const [data, preferences] = await Promise.all([
-        getEntries(),
+        withOfflineTimeout(getEntries(), SHORT_API_TIMEOUT_MS),
         getUserPreferences().catch(() => null),
       ]);
-      setEntries(data);
+      await saveCachedServerJournalEntries(
+        data.filter((entry): entry is JournalEntry & { id: number } => typeof entry.id === "number"),
+      );
+      const dedupedOffline = mappedOffline.filter((item) => !item.server_id);
+      setEntries([...dedupedOffline, ...data]);
       if (preferences) {
         setDefaultPrivate(
           preferences.privacy_preferences.journal_private_default,
         );
       }
     } catch (e) {
+      const cachedEntries = await getCachedServerJournalEntries();
+      const hasFallbackData =
+        mappedOffline.length > 0 || cachedEntries.length > 0;
+      setEntries([
+        ...mappedOffline.filter((item) => !item.server_id),
+        ...cachedEntries,
+      ]);
+      setOfflineNotice("You're offline. Showing saved entries.");
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
         await signOut("sessionExpired");
         return;
       }
-      setError(e instanceof ApiError ? e.message : t("couldNotLoadEntries"));
+      setError(
+        hasFallbackData
+          ? null
+          : e instanceof ApiError
+            ? e.message
+            : t("couldNotLoadEntries"),
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [signOut]);
+  }, [language, signOut, t]);
 
   useEffect(() => {
     load();
+  }, [load]);
+
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      load();
+    }, 20000);
+    return () => clearInterval(intervalId);
+  }, [load]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      load();
+    }, 20000);
+    return () => clearInterval(intervalId);
+  }, [load]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      load();
+    }, 20000);
+    return () => clearInterval(intervalId);
   }, [load]);
 
   useEffect(() => {
@@ -1044,6 +1243,11 @@ export function AIDiaryScreen({ route, navigation }: Props) {
               <Pressable style={styles.retry} onPress={onRefresh}>
                 <Text style={styles.retryText}>{t("retry")}</Text>
               </Pressable>
+            </View>
+          ) : null}
+          {offlineNotice ? (
+            <View style={styles.offlineBox}>
+              <Text style={styles.offlineText}>{offlineNotice}</Text>
             </View>
           ) : null}
           {entries.length === 0 ? (
@@ -1108,6 +1312,11 @@ export function AIDiaryScreen({ route, navigation }: Props) {
                         <Text style={styles.publicText}>{t("public")}</Text>
                       </View>
                     )}
+                    {entry.sync_status && entry.sync_status !== "synced" && (
+                      <View style={styles.pendingChip}>
+                        <Text style={styles.pendingText}>Pending sync</Text>
+                      </View>
+                    )}
                   </View>
                 </Pressable>
               );
@@ -1165,6 +1374,13 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   retryText: { color: colors.white, fontWeight: "700", fontSize: 13 },
+  offlineBox: {
+    backgroundColor: "#FFF7ED",
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+  },
+  offlineText: { color: "#9A3412", fontWeight: "600" },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -1234,6 +1450,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#F0F4FF",
   },
   publicText: { fontSize: 11, color: colors.textMuted },
+  pendingChip: {
+    backgroundColor: "#FEF3C7",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  pendingText: { fontSize: 11, color: "#92400E", fontWeight: "600" },
   empty: {
     alignItems: "center",
     paddingVertical: 60,

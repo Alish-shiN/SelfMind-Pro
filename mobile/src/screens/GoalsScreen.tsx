@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   Alert,
@@ -31,6 +32,12 @@ import {
 } from "../api/goals";
 import { colors } from "../theme/colors";
 import { useTranslation } from "../i18n/I18nContext";
+import { OfflineNotice } from "../components/OfflineNotice";
+import {
+  getNetworkOfflineState,
+  isOfflineLikeError,
+  withOfflineTimeout,
+} from "../services/offlineNetworkService";
 import {
   getAchievementGoalPaused,
   getAchievementPrivacyReady,
@@ -341,6 +348,7 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
 }
 
 export function GoalsScreen() {
+  const GOALS_CACHE_KEY = "goals_screen_cache_v1";
   const { t } = useTranslation();
   const [progress, setProgress] = useState<GoalProgress[]>([]);
   const [summary, setSummary] = useState<WeeklyGoalSummary | null>(null);
@@ -353,10 +361,12 @@ export function GoalsScreen() {
   const [addedKey, setAddedKey] = useState<string | null>(null);
   const [achievementsVisible, setAchievementsVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       setError(null);
+      setOfflineNotice(null);
       const [
         p,
         s,
@@ -370,9 +380,9 @@ export function GoalsScreen() {
         weeklySummaryCompleted,
         goalPaused,
       ] = await Promise.all([
-        getGoalProgress(),
-        getWeeklyGoalSummary(),
-        getGoalTemplates(),
+        withOfflineTimeout(getGoalProgress()),
+        withOfflineTimeout(getWeeklyGoalSummary()),
+        withOfflineTimeout(getGoalTemplates()),
         getDashboardHome().catch(() => null),
         getAiQuizHistory(100).catch(() => []),
         getMyChatSessions().catch(() => []),
@@ -388,6 +398,10 @@ export function GoalsScreen() {
       setProgress(p);
       setSummary(s);
       setTemplates(templatesData);
+      await AsyncStorage.setItem(
+        GOALS_CACHE_KEY,
+        JSON.stringify({ progress: p, summary: s, templates: templatesData }),
+      );
       const reflectionProgress = p.find(
         (item) => item.goal.goal_type === "reflection",
       );
@@ -444,7 +458,24 @@ export function GoalsScreen() {
         ),
       );
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : t("couldNotLoadGoals"));
+      const cachedRaw = await AsyncStorage.getItem(GOALS_CACHE_KEY);
+      if (cachedRaw) {
+        const cached = JSON.parse(cachedRaw);
+        setProgress(cached.progress ?? []);
+        setSummary(cached.summary ?? null);
+        setTemplates(cached.templates ?? []);
+        setOfflineNotice(t("offlineShowingSavedData"));
+      }
+      const offlineState = await getNetworkOfflineState();
+      setError(
+        cachedRaw
+          ? null
+          : offlineState || isOfflineLikeError(e)
+            ? t("offlineShowingSavedData")
+            : e instanceof ApiError
+              ? e.message
+              : t("couldNotLoadGoals"),
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -460,6 +491,11 @@ export function GoalsScreen() {
     success: string,
     options?: { feedbackKey?: string; silentSuccess?: boolean },
   ) => {
+    const isOffline = await getNetworkOfflineState();
+    if (isOffline) {
+      Alert.alert(t("onlineRequired"), t("featureRequiresConnection"));
+      return;
+    }
     setSaving(true);
     if (options?.feedbackKey) {
       setSavingKey(options.feedbackKey);
@@ -541,6 +577,7 @@ export function GoalsScreen() {
           }
         >
           {error ? <Text style={styles.error}>{error}</Text> : null}
+          {offlineNotice ? <OfflineNotice message={offlineNotice} /> : null}
 
           <View style={styles.summaryCard}>
             <Text style={styles.sectionTitle}>{t("weeklySummary")}</Text>
