@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   Alert,
@@ -80,7 +79,6 @@ function titleCase(value?: string | null) {
 }
 
 export function AiQuizScreen({ navigation }: Props) {
-  const QUIZ_CACHE_KEY = "ai_quiz_cache_v1";
   const { signOut } = useAuth();
   const { t, language } = useTranslation();
   const locale = languageLocales[language as keyof typeof languageLocales];
@@ -135,21 +133,10 @@ export function AiQuizScreen({ navigation }: Props) {
       ]);
       setQuizTypes(types);
       setHistory(completed);
-      await AsyncStorage.setItem(
-        QUIZ_CACHE_KEY,
-        JSON.stringify({ quizTypes: types, history: completed }),
-      );
       if (!selectedQuizType && types[0]) setSelectedQuizType(types[0].key);
     } catch (e) {
-      const cached = await AsyncStorage.getItem(QUIZ_CACHE_KEY);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        setQuizTypes(parsed.quizTypes ?? []);
-        setHistory(parsed.history ?? []);
-        setOfflineNotice(t("offlineShowingSavedData"));
-      }
-      if (isOfflineLikeError(e)) {
-        setError(cached ? null : t("offlineShowingSavedData"));
+      if (await getNetworkOfflineState()) {
+        setError(t("featureRequiresConnection"));
         return;
       }
       await handleAuthError(e, t("couldNotLoadQuiz"));

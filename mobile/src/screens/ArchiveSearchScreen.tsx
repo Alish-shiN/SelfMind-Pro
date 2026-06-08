@@ -29,6 +29,8 @@ import {
   toggleArchiveFavoriteId,
 } from "../lib/archiveFavorites";
 import { translateEmotionLabel, translateSentimentLabel } from "../utils/mood";
+import { OfflineNotice } from "../components/OfflineNotice";
+import { getNetworkOfflineState, withOfflineTimeout } from "../services/offlineNetworkService";
 
 type Props = NativeStackScreenProps<RootStackParamList, "ArchiveSearch">;
 
@@ -184,6 +186,7 @@ export function ArchiveSearchScreen({ navigation, route }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
 
   const shouldSearch = useMemo(
     () =>
@@ -223,7 +226,8 @@ export function ArchiveSearchScreen({ navigation, route }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const data = await searchArchive({
+      setOfflineNotice(null);
+      const data = await withOfflineTimeout(searchArchive({
         q: query.trim() || undefined,
         tab,
         start_date: startDate.trim() || undefined,
@@ -233,7 +237,7 @@ export function ArchiveSearchScreen({ navigation, route }: Props) {
         favorites_only: favoritesOnly || tab === "favorites",
         favorite_ids: savedFavoriteIds,
         sort,
-      });
+      }));
       setResults(
         data.map((item) => ({
           ...item,
@@ -246,8 +250,11 @@ export function ArchiveSearchScreen({ navigation, route }: Props) {
         await signOut("sessionExpired");
         return;
       }
+      const isOffline = await getNetworkOfflineState();
       setError(
-        e instanceof ApiError ? e.message : "Could not search your archive.",
+        isOffline
+          ? t("featureRequiresConnection")
+          : e instanceof ApiError ? e.message : "Could not search your archive.",
       );
     } finally {
       setLoading(false);
@@ -427,6 +434,7 @@ export function ArchiveSearchScreen({ navigation, route }: Props) {
             </Pressable>
           </View>
         ) : null}
+        {offlineNotice ? <OfflineNotice message={offlineNotice} /> : null}
 
         {loading ? (
           <View style={styles.center}>

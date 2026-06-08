@@ -9,6 +9,7 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import TypeAdapter
 
 from app.core.config import settings
+from app.core.encryption import decrypt_text, encrypt_text
 
 T = TypeVar("T")
 _MISSING = object()
@@ -93,7 +94,7 @@ class RedisCache:
             value = client.get(key)
             if value is None:
                 return _MISSING
-            payload = json.loads(value)
+            payload = json.loads(decrypt_text(value))
             if (
                 isinstance(payload, dict)
                 and payload.get("__selfmind_cache_payload__") is True
@@ -112,7 +113,7 @@ class RedisCache:
                 "__selfmind_cache_payload__": True,
                 "value": jsonable_encoder(value),
             }
-            client.setex(key, ttl_seconds, json.dumps(payload))
+            client.setex(key, ttl_seconds, encrypt_text(json.dumps(payload)))
         except Exception:
             return
 

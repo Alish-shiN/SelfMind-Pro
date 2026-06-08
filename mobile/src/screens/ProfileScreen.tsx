@@ -21,6 +21,8 @@ import { getReminderPreferences, ReminderPreference } from "../api/reminders";
 import { scheduleReminderPreferences } from "../lib/notifications";
 import { supportedLanguages, useTranslation } from "../i18n/I18nContext";
 import type { UserResponse } from "../api/auth";
+import { OfflineNotice } from "../components/OfflineNotice";
+import { getNetworkOfflineState, withOfflineTimeout } from "../services/offlineNetworkService";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Profile">;
 
@@ -91,15 +93,17 @@ export function ProfileScreen({ navigation, route }: Props) {
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     setLoading(true);
     try {
+      setOfflineNotice(null);
       const [u, reminderPrefs, userPrefs, accountInfo] = await Promise.all([
-        getCurrentUser(),
-        getReminderPreferences(),
-        getUserPreferences(),
+        withOfflineTimeout(getCurrentUser()),
+        withOfflineTimeout(getReminderPreferences()),
+        withOfflineTimeout(getUserPreferences()),
         getAccountInfo().catch(() => null),
       ]);
       setUser(u);
@@ -113,7 +117,14 @@ export function ProfileScreen({ navigation, route }: Props) {
         await signOut("sessionExpired");
         return;
       }
-      setError(e instanceof ApiError ? e.message : t("couldNotLoadProfile"));
+      const isOffline = await getNetworkOfflineState();
+      setError(
+        isOffline
+          ? t("featureRequiresConnection")
+          : e instanceof ApiError
+            ? e.message
+            : t("couldNotLoadProfile"),
+      );
     } finally {
       setLoading(false);
     }
@@ -172,6 +183,7 @@ export function ProfileScreen({ navigation, route }: Props) {
             </Pressable>
           </View>
         ) : null}
+        {offlineNotice ? <OfflineNotice message={offlineNotice} /> : null}
 
         {!loading && user ? (
           <>

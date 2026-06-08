@@ -12,6 +12,7 @@ from app.services.ai_quiz_config import (
     quiz_title,
 )
 from app.services.ai_quiz_engine import AIQuizEngine
+from app.services.metrics import ai_quiz_sessions_completed_total
 from app.services.personalization_service import PersonalizationService
 from app.services.safety_service import SafetyService
 
@@ -132,6 +133,7 @@ class AIQuizService:
         )
 
         self.repo.mark_session_completed(session)
+        ai_quiz_sessions_completed_total.inc()
         return result
 
     def list_history(self, current_user: User, limit: int = 25) -> list[dict]:

@@ -77,4 +77,10 @@ class ChatService:
         }
 
     def _build_context(self, current_user: User) -> dict:
+        privacy = current_user.privacy_preferences or {}
+        if not (
+            privacy.get("ai_processing_consent", False)
+            and privacy.get("share_ai_insights", False)
+        ):
+            return {}
         return self.personalization_service.build_context(current_user)

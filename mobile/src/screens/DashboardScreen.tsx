@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -19,6 +19,8 @@ import { useAuth } from "../context/AuthContext";
 import { languageLocales, useTranslation } from "../i18n/I18nContext";
 import { setAchievementWeeklyMoodReview } from "../lib/storage";
 import { getAccountInfo, resolveMediaUrl } from "../api/user";
+import { OfflineNotice } from "../components/OfflineNotice";
+import { getNetworkOfflineState, withOfflineTimeout } from "../services/offlineNetworkService";
 
 const MOOD_EMOJI: Record<string, string> = {
   joy: "😊",
@@ -356,6 +358,7 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
   const [data, setData] = useState<DashboardHome | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
@@ -392,10 +395,11 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
 
   const load = useCallback(async () => {
     setError(null);
+    setOfflineNotice(null);
     try {
       const [d, moodAnalytics, accountInfo] = await Promise.all([
-        getDashboardHome(),
-        getMoodAnalytics(analyticsPeriod, analyticsGranularity),
+        withOfflineTimeout(getDashboardHome()),
+        withOfflineTimeout(getMoodAnalytics(analyticsPeriod, analyticsGranularity)),
         getAccountInfo().catch(() => null),
       ]);
       setData(d);
@@ -409,12 +413,13 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
         setError(null);
         return;
       }
-      setError(e instanceof ApiError ? e.message : t("couldNotLoadProfile"));
+      const offlineState = await getNetworkOfflineState();
+      setError(offlineState ? t("featureRequiresConnection") : e instanceof ApiError ? e.message : t("couldNotLoadProfile"));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [analyticsGranularity, analyticsPeriod, signOut]);
+  }, [analyticsGranularity, analyticsPeriod, signOut, t]);
 
   useEffect(() => {
     load();
@@ -485,6 +490,8 @@ export function DashboardScreen({ navigation }: { navigation: any }) {
             </Pressable>
           </View>
         ) : null}
+
+        {offlineNotice ? <OfflineNotice message={offlineNotice} /> : null}
 
         {/* Mood card */}
         <View style={styles.moodCard}>

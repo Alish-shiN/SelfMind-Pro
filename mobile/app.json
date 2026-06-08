@@ -4,7 +4,7 @@
     "slug": "selfmind-pro",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/iconSelfMind.png",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/selfmind-logo.png",
@@ -28,7 +28,8 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      "expo-secure-store"
     ]
   }
 }

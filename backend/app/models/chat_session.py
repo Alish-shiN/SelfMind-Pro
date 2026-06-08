@@ -1,7 +1,8 @@
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+from app.core.encryption import EncryptedText
 
 
 class ChatSession(TimestampMixin, Base):
@@ -13,7 +14,7 @@ class ChatSession(TimestampMixin, Base):
         nullable=False,
         index=True,
     )
-    title: Mapped[str] = mapped_column(String(200), nullable=False, default="New conversation")
+    title: Mapped[str] = mapped_column(EncryptedText(), nullable=False, default="New conversation")
 
     user = relationship("User", back_populates="chat_sessions")
     messages = relationship(

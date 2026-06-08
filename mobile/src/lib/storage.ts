@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 
 const TOKEN_KEY = "@selfmind/token";
 const ONBOARDING_KEY = "@selfmind/onboarding_done";
@@ -10,16 +11,55 @@ const ACHIEVEMENT_WEEKLY_SUMMARY_COMPLETED_KEY =
   "selfmind:achievement_weekly_summary_completed";
 const ACHIEVEMENT_GOAL_PAUSED_KEY = "selfmind:achievement_goal_paused";
 
+function secureKey(key: string): string {
+  return key.replace(/[^A-Za-z0-9._-]/g, "_");
+}
+
 export async function getToken(): Promise<string | null> {
-  return AsyncStorage.getItem(TOKEN_KEY);
+  const secureToken = await SecureStore.getItemAsync(secureKey(TOKEN_KEY));
+  if (secureToken) return secureToken;
+  const legacyToken = await AsyncStorage.getItem(TOKEN_KEY);
+  if (legacyToken) {
+    await SecureStore.setItemAsync(secureKey(TOKEN_KEY), legacyToken);
+    await AsyncStorage.removeItem(TOKEN_KEY);
+  }
+  return legacyToken;
 }
 
 export async function setToken(token: string): Promise<void> {
-  await AsyncStorage.setItem(TOKEN_KEY, token);
+  await SecureStore.setItemAsync(secureKey(TOKEN_KEY), token);
+  await AsyncStorage.removeItem(TOKEN_KEY);
 }
 
 export async function clearToken(): Promise<void> {
-  await AsyncStorage.removeItem(TOKEN_KEY);
+  await Promise.all([
+    SecureStore.deleteItemAsync(secureKey(TOKEN_KEY)),
+    AsyncStorage.removeItem(TOKEN_KEY),
+  ]);
+  await purgeSensitiveLocalCaches();
+}
+
+export async function purgeSensitiveLocalCaches(): Promise<void> {
+  const keys = await AsyncStorage.getAllKeys();
+  const exactKeys = new Set([
+    "offline_journal_entries_v1",
+    "cached_server_journal_entries_v1",
+    "home_dashboard_cache_v1",
+    "dashboard_home_cache_v1",
+    "ai_quiz_cache_v1",
+    "archive_search_cache_v1",
+    "goals_screen_cache_v1",
+    "profile_screen_cache_v1",
+  ]);
+  const sensitiveKeys = keys.filter(
+    (key) =>
+      exactKeys.has(key) ||
+      key.startsWith("ai_chat_session_cache_v1_") ||
+      key.startsWith("dashboard_mood_analytics_cache_v1_"),
+  );
+  if (sensitiveKeys.length > 0) {
+    await AsyncStorage.multiRemove(sensitiveKeys);
+  }
 }
 
 export async function getOnboardingComplete(): Promise<boolean> {
@@ -37,7 +77,15 @@ function trustedPersonPhoneKey(userId: number | string): string {
 
 export async function getTrustedPersonPhone(userId?: number | string | null): Promise<string | null> {
   if (userId === undefined || userId === null || userId === "") return null;
-  return AsyncStorage.getItem(trustedPersonPhoneKey(userId));
+  const key = trustedPersonPhoneKey(userId);
+  const securePhone = await SecureStore.getItemAsync(secureKey(key));
+  if (securePhone) return securePhone;
+  const legacyPhone = await AsyncStorage.getItem(key);
+  if (legacyPhone) {
+    await SecureStore.setItemAsync(secureKey(key), legacyPhone);
+    await AsyncStorage.removeItem(key);
+  }
+  return legacyPhone;
 }
 
 export async function setTrustedPersonPhone(
@@ -50,11 +98,13 @@ export async function setTrustedPersonPhone(
   const normalized = phone.trim();
   const userKey = trustedPersonPhoneKey(userId);
   if (!normalized) {
+    await SecureStore.deleteItemAsync(secureKey(userKey));
     await AsyncStorage.removeItem(userKey);
     await AsyncStorage.removeItem(TRUSTED_PERSON_PHONE_KEY);
     return;
   }
-  await AsyncStorage.setItem(userKey, normalized);
+  await SecureStore.setItemAsync(secureKey(userKey), normalized);
+  await AsyncStorage.removeItem(userKey);
   await AsyncStorage.removeItem(TRUSTED_PERSON_PHONE_KEY);
 }
 

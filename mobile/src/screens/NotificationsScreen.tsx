@@ -20,6 +20,14 @@ export function NotificationsScreen({ navigation }: Props) {
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    (async () => {
+      const data = await getMyNotifications();
+      const unread = data.filter((item) => item.status === "unread");
+      await Promise.all(unread.map((item) => updateNotificationStatus(item.id, "read").catch(() => undefined)));
+      await load();
+    })();
+  }, [load]);
 
   const act = async (notification: any, action: "accepted" | "rejected") => {
     const match = notification.body.match(/request\./i);

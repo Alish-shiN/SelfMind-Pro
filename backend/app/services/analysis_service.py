@@ -43,6 +43,7 @@ class AnalysisService:
     def regenerate_for_entry(
         self, current_user: User, entry_id: int, language: str = "en"
     ):
+        self._require_ai_consent(current_user)
         entry = self.journal_repo.get_by_id_and_user(entry_id, current_user.id)
         if not entry:
             raise HTTPException(
@@ -70,6 +71,7 @@ class AnalysisService:
     def get_entry_analysis(
         self, current_user: User, entry_id: int, language: str = "en"
     ):
+        self._require_ai_consent(current_user)
         entry = self.journal_repo.get_by_id_and_user(entry_id, current_user.id)
         if not entry:
             raise HTTPException(
@@ -81,3 +83,11 @@ class AnalysisService:
             analysis = self.generate_for_entry(entry.id, language=language)
 
         return analysis
+
+    @staticmethod
+    def _require_ai_consent(current_user: User) -> None:
+        if not (current_user.privacy_preferences or {}).get("ai_processing_consent", False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="AI processing is disabled in privacy settings",
+            )

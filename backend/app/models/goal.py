@@ -1,7 +1,8 @@
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+from app.core.encryption import EncryptedText
 
 
 class Goal(TimestampMixin, Base):
@@ -21,8 +22,8 @@ class Goal(TimestampMixin, Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    title: Mapped[str] = mapped_column(String(120), nullable=False)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    title: Mapped[str] = mapped_column(EncryptedText(), nullable=False)
+    description: Mapped[str | None] = mapped_column(EncryptedText(), nullable=True)
     goal_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     target_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     period: Mapped[str] = mapped_column(String(20), default="weekly", nullable=False)

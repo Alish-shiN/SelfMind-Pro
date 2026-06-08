@@ -5,6 +5,10 @@ from app.models.user import User
 from app.repo.journal_repository import JournalRepository
 from app.schemas.journal import JournalCreate, JournalUpdate
 from app.services.analysis_service import AnalysisService
+from app.services.metrics import (
+    journal_entries_created_total,
+    mood_checkins_created_total,
+)
 from app.services.safety_service import SafetyService
 
 
@@ -35,7 +39,11 @@ class JournalService:
             payload.content,
             mood_score=payload.mood_score,
         )
-        self.analysis_service.generate_for_entry(entry.id, language=payload.language)
+        if _allows_ai_processing(current_user):
+            self.analysis_service.generate_for_entry(entry.id, language=payload.language)
+        journal_entries_created_total.inc()
+        if payload.mood_score is not None:
+            mood_checkins_created_total.inc()
         return entry
 
     def get_my_entries(self, current_user: User):
@@ -75,7 +83,8 @@ class JournalService:
                 ),
             )
 
-        self.analysis_service.regenerate_for_entry(current_user, updated_entry.id)
+        if _allows_ai_processing(current_user):
+            self.analysis_service.regenerate_for_entry(current_user, updated_entry.id)
 
         return updated_entry
 
@@ -88,3 +97,8 @@ class JournalService:
 
         self.repo.delete(entry)
         return {"message": "Journal entry deleted successfully"}
+
+
+def _allows_ai_processing(user: User) -> bool:
+    preferences = user.privacy_preferences or {}
+    return bool(preferences.get("ai_processing_consent", False))

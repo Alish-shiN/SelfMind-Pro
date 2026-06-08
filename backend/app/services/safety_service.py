@@ -29,25 +29,25 @@ SEVERITY_RANK = {"low": 1, "medium": 2, "high": 3, "crisis": 4}
 
 CRISIS_RESOURCES = [
     {
-        "title": "988 Suicide & Crisis Lifeline",
-        "description": "Call or text 988 if you or someone nearby may be in immediate emotional crisis.",
-        "action_label": "Call or text 988",
-        "action_value": "988",
-        "country": "US",
-    },
-    {
         "title": "Emergency services",
-        "description": "If there is immediate danger, contact local emergency services now.",
+        "description": "If you are in immediate danger, call local emergency services now.",
         "action_label": "Call 112",
         "action_value": "112",
-        "country": "US",
+        "country": "GLOBAL",
+    },
+    {
+        "title": "Local crisis hotline",
+        "description": "Call your local mental health or crisis hotline for urgent support.",
+        "action_label": "Find local hotline",
+        "action_value": "112",
+        "country": "GLOBAL",
     },
     {
         "title": "Trusted person",
         "description": "Reach out to a trusted friend, family member, mentor, or campus support contact.",
         "action_label": "Contact someone you trust",
         "action_value": "trusted_person",
-        "country": "US",
+        "country": "GLOBAL",
     },
 ]
 

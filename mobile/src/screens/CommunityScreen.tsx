@@ -17,11 +17,14 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { ApiError, apiFetch } from "../api/client";
-import { getCurrentUser, getUserPreferences, getPublicProfile, resolveMediaUrl, sendFriendRequest } from "../api/user";
+import { getCurrentUser, getUserPreferences, getPublicProfile, resolveMediaUrl, sendFriendRequest, type PublicMiniProfile } from "../api/user";
 import { createOrGetConversation } from "../api/dm";
 import type { UserResponse } from "../api/auth";
 import { colors } from "../theme/colors";
 import { useTranslation } from "../i18n/I18nContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { OfflineNotice } from "../components/OfflineNotice";
+import { getNetworkOfflineState, withOfflineTimeout } from "../services/offlineNetworkService";
 
 type CommunityAuthor = { id: number | null; username: string; avatar_url?: string | null };
 type LocalImageFile = { uri: string; name: string; type: string };
@@ -576,19 +579,11 @@ function PostCard({
   onAuthorPress?: (author: CommunityAuthor) => void;
 }) {
   const { t } = useTranslation();
-  const [avatarFailed, setAvatarFailed] = useState(false);
-  const avatarUrl = resolveMediaUrl(post.author.avatar_url);
   return (
     <Pressable style={cardStyles.card} onPress={onPress}>
       <View style={cardStyles.header}>
-        <Pressable style={cardStyles.avatar} onPress={() => onAuthorPress?.(post.author)}>
-          {avatarUrl && !avatarFailed ? (
-            <Image source={{ uri: avatarUrl }} style={cardStyles.avatarImg} onError={() => setAvatarFailed(true)} />
-          ) : (
-            <Text style={cardStyles.avatarText}>
-              {post.author.username[0].toUpperCase()}
-            </Text>
-          )}
+        <Pressable onPress={() => onAuthorPress?.(post.author)}>
+          <AvatarCircle name={post.author.username} avatarUrl={post.author.avatar_url} />
         </Pressable>
         <Pressable style={{ flex: 1 }} onPress={() => onAuthorPress?.(post.author)}>
           <Text style={cardStyles.author}>{post.author.username}</Text>
@@ -635,6 +630,43 @@ function PostCard({
         ) : null}
       </View>
     </Pressable>
+  );
+}
+
+function AvatarCircle({
+  name,
+  avatarUrl,
+  size = 42,
+  textStyle,
+  imageStyle,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  size?: number;
+  textStyle?: any;
+  imageStyle?: any;
+}) {
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  const resolvedAvatar = resolveMediaUrl(avatarUrl);
+  return (
+    <View
+      style={[
+        cardStyles.avatar,
+        { width: size, height: size, borderRadius: size / 2 },
+      ]}
+    >
+      {resolvedAvatar && !avatarFailed ? (
+        <Image
+          source={{ uri: resolvedAvatar }}
+          style={[cardStyles.avatarImg, imageStyle]}
+          onError={() => setAvatarFailed(true)}
+        />
+      ) : (
+        <Text style={[cardStyles.avatarText, textStyle]}>
+          {name?.[0]?.toUpperCase?.() || "?"}
+        </Text>
+      )}
+    </View>
   );
 }
 
@@ -749,10 +781,13 @@ function PostDetailModal({
               automaticallyAdjustKeyboardInsets
             >
               <View style={cardStyles.card}>
-                <Text style={cardStyles.author}>{detail.author.username}</Text>
-                <Text style={cardStyles.time}>
-                  {timeAgo(detail.created_at, t)}
-                </Text>
+                <View style={cardStyles.header}>
+                  <AvatarCircle name={detail.author.username} avatarUrl={detail.author.avatar_url} />
+                  <View>
+                    <Text style={cardStyles.author}>{detail.author.username}</Text>
+                    <Text style={cardStyles.time}>{detail.support_space} · {timeAgo(detail.created_at, t)}</Text>
+                  </View>
+                </View>
                 <Text style={cardStyles.content}>{detail.content}</Text>
                 {detail.image_url ? (
                   <Image source={{ uri: resolveMediaUrl(detail.image_url) ?? undefined }} style={cardStyles.postImage} resizeMode="cover" />
@@ -775,13 +810,7 @@ function PostDetailModal({
               {detail.comments.map((comment) => (
                 <View key={comment.id} style={modalStyles.commentCard}>
                   <View style={modalStyles.commentAuthorRow}>
-                    <View style={cardStyles.avatar}>
-                      {resolveMediaUrl(comment.author.avatar_url) ? (
-                        <Image source={{ uri: resolveMediaUrl(comment.author.avatar_url) ?? undefined }} style={cardStyles.avatarImg} />
-                      ) : (
-                        <Text style={cardStyles.avatarText}>{comment.author.username?.[0]?.toUpperCase() || "?"}</Text>
-                      )}
-                    </View>
+                    <AvatarCircle name={comment.author.username} avatarUrl={comment.author.avatar_url} />
                     <Text style={modalStyles.commentAuthor}>{comment.author.username} · {timeAgo(comment.created_at, t)}</Text>
                   </View>
                   <Text style={modalStyles.commentContent}>
@@ -859,6 +888,7 @@ function PostDetailModal({
 
 export function CommunityScreen({ navigation }: any) {
   const { t } = useTranslation();
+  const COMMUNITY_CACHE_KEY = "community_feed_cache_v1";
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [feedSort, setFeedSort] = useState<FeedSort>("newest");
   const [guidelines, setGuidelines] = useState<Guidelines | null>(null);
@@ -868,12 +898,13 @@ export function CommunityScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [showGuidelines, setShowGuidelines] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState<number | null>(null);
-  const [publicProfile, setPublicProfile] = useState<any | null>(null);
+  const [publicProfile, setPublicProfile] = useState<PublicMiniProfile | { is_anonymous: true } | null>(null);
   const handleAuthorPress = async (author: CommunityAuthor) => {
-    if (!author.id) return;
+    if (!author.id) { setPublicProfile({ is_anonymous: true }); return; }
     const p = await getPublicProfile(author.id);
     setPublicProfile(p);
   };
@@ -892,9 +923,10 @@ export function CommunityScreen({ navigation }: any) {
   const load = useCallback(async () => {
     setError(null);
     try {
+      setOfflineNotice(null);
       const [guideData, feedData, userData, prefsData] = await Promise.all([
-        getGuidelines(),
-        getFeed(selectedSpace),
+        withOfflineTimeout(getGuidelines()),
+        withOfflineTimeout(getFeed(selectedSpace)),
         getCurrentUser().catch(() => null),
         getUserPreferences().catch(() => null),
       ]);
@@ -910,9 +942,22 @@ export function CommunityScreen({ navigation }: any) {
       if (prefsData) {
         setDefaultAnonymous(prefsData.privacy_preferences.anonymous_community_default);
       }
+      await AsyncStorage.setItem(COMMUNITY_CACHE_KEY, JSON.stringify({ guideData, feedData }));
     } catch (e) {
-      const message = e instanceof ApiError ? e.message : t("couldNotLoadDashboard");
-      setError(message);
+      const cached = await AsyncStorage.getItem(COMMUNITY_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const feedData = parsed.feedData ?? [];
+        setGuidelines(parsed.guideData ?? null);
+        setPosts(sortPosts(feedData, feedSort));
+        if (await getNetworkOfflineState()) setOfflineNotice(t("offlineShowingSavedData")); else setOfflineNotice(null);
+        setError(null);
+      } else {
+        const message = await getNetworkOfflineState()
+          ? t("offlineShowingSavedData")
+          : e instanceof ApiError ? e.message : t("couldNotLoadDashboard");
+        setError(message);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -971,6 +1016,10 @@ export function CommunityScreen({ navigation }: any) {
       {
         text: t("report"),
         onPress: async () => {
+          if (await getNetworkOfflineState()) {
+            Alert.alert(t("onlineRequired"), t("featureRequiresConnection"));
+            return;
+          }
           await reportPost(id);
           Alert.alert(t("thanks"), t("moderatorsReview"));
         },
@@ -985,6 +1034,10 @@ export function CommunityScreen({ navigation }: any) {
         text: t("delete"),
         style: "destructive",
         onPress: async () => {
+          if (await getNetworkOfflineState()) {
+            Alert.alert(t("onlineRequired"), t("featureRequiresConnection"));
+            return;
+          }
           await deletePost(id);
           load();
         },
@@ -1074,6 +1127,7 @@ export function CommunityScreen({ navigation }: any) {
           }
           showsVerticalScrollIndicator={false}
         >
+          {offlineNotice ? <OfflineNotice message={offlineNotice} /> : null}
           {error ? (
             <View style={styles.errBox}>
               <Text style={styles.errText}>{error}</Text>
@@ -1097,6 +1151,10 @@ export function CommunityScreen({ navigation }: any) {
                 onDelete={() => handleDeletePost(post.id)}
                 onReport={() => confirmReportPost(post.id)}
                 onReact={async (reaction) => {
+                  if (await getNetworkOfflineState()) {
+                    Alert.alert(t("onlineRequired"), t("featureRequiresConnection"));
+                    return;
+                  }
                   const response = await reactToPost(post.id, reaction);
                   handlePostReacted(post.id, reaction, response);
                 }}
@@ -1109,7 +1167,13 @@ export function CommunityScreen({ navigation }: any) {
         </ScrollView>
       )}
 
-      <Pressable style={styles.fab} onPress={() => setShowNew(true)}>
+      <Pressable style={styles.fab} onPress={async () => {
+        if (await getNetworkOfflineState()) {
+          Alert.alert(t("onlineRequired"), t("featureRequiresConnection"));
+          return;
+        }
+        setShowNew(true);
+      }}>
         <Ionicons name="add" size={28} color="#fff" />
       </Pressable>
       <NewPostModal
@@ -1147,63 +1211,75 @@ export function CommunityScreen({ navigation }: any) {
       {publicProfile ? (
         <Modal visible animationType="slide" presentationStyle="pageSheet">
           <SafeAreaView style={modalStyles.safe} edges={["top", "bottom"]}>
-            <View style={modalStyles.topBar}>
-              <Pressable onPress={() => setPublicProfile(null)} hitSlop={12}>
-                <Ionicons name="arrow-back" size={22} color={colors.text} />
-              </Pressable>
-              <Text style={modalStyles.title}>Profile</Text>
-              <View style={{ width: 22 }} />
-            </View>
-            <ScrollView contentContainerStyle={modalStyles.body}>
-              <View style={modalStyles.profileCard}>
-                <View style={modalStyles.profileAvatarWrap}>
-                  {resolveMediaUrl(publicProfile.avatar_url) ? (
-                    <Image source={{ uri: resolveMediaUrl(publicProfile.avatar_url) ?? undefined }} style={modalStyles.profileAvatarImg} />
-                  ) : (
-                    <Text style={modalStyles.profileAvatarText}>{publicProfile.username?.[0]?.toUpperCase?.() ?? "?"}</Text>
-                  )}
-                </View>
-                <Text style={modalStyles.profileName}>{publicProfile.username}</Text>
-                <View style={modalStyles.statPill}>
-                  <Text style={modalStyles.statLabel}>Friends</Text>
-                  <Text style={modalStyles.statValue}>{publicProfile.friends_count ?? 0}</Text>
-                </View>
-                <View style={modalStyles.profileInfoCard}>
-                  <Text style={modalStyles.profileInfoText}>{publicProfile.bio || "No bio provided yet."}</Text>
-                  <Text style={modalStyles.profileInfoMeta}>Country: {publicProfile.country || "—"}</Text>
-                  <Text style={modalStyles.profileInfoMeta}>Member since: {new Date(publicProfile.member_since).toLocaleDateString()}</Text>
-                </View>
-                <View style={modalStyles.profileActionsRow}>
-                <Pressable
-                  style={[modalStyles.profileActionBtn, modalStyles.friendBtn]}
-                  onPress={async () => {
-                    try {
-                      await sendFriendRequest(publicProfile.id);
-                      Alert.alert("Success", "Friend request sent.");
-                    } catch (e: any) {
-                      Alert.alert("Error", e?.message ?? "Could not send request");
-                    }
-                  }}
-                >
-                  <Text style={modalStyles.postText}>Add friend</Text>
-                </Pressable>
-                <Pressable
-                  style={[modalStyles.profileActionBtn, modalStyles.messageBtn]}
-                  onPress={async () => {
-                    try {
-                      const conv = await createOrGetConversation(publicProfile.id);
-                      setPublicProfile(null);
-                      navigation.navigate("Home", { screen: "DirectChat", params: { conversationId: conv.id, title: publicProfile.username } });
-                    } catch (e: any) {
-                      Alert.alert("Error", e?.message ?? "Could not open chat");
-                    }
-                  }}
-                >
-                  <Text style={modalStyles.postText}>Message</Text>
-                </Pressable>
-                </View>
+            <View style={modalStyles.topBar}><Pressable onPress={() => setPublicProfile(null)} hitSlop={12}><Ionicons name="arrow-back" size={22} color={colors.text} /></Pressable><Text style={modalStyles.title}>Profile</Text><View style={{ width: 22 }} /></View>
+            {"is_anonymous" in publicProfile ? (
+              <View style={styles.center}>
+                <Text style={modalStyles.profileName}>{t("anonymousPost")}</Text>
+                <Text style={modalStyles.profileInfoText}>{t("anonymousAuthorStayed")}</Text>
               </View>
-            </ScrollView>
+            ) : (
+              <ScrollView contentContainerStyle={modalStyles.body}>
+                <View style={modalStyles.profileCard}>
+                  <View style={modalStyles.profileAvatarWrap}>
+                    <AvatarCircle name={publicProfile.username} avatarUrl={publicProfile.avatar_url} size={108} textStyle={modalStyles.profileAvatarText} imageStyle={modalStyles.profileAvatarImg} />
+                  </View>
+                  <Text style={modalStyles.profileName}>{publicProfile.username}</Text>
+                  {(publicProfile.is_own_profile || publicProfile.is_friend || !publicProfile.is_private_account) ? (
+                    <View style={modalStyles.statPill}>
+                      <Text style={modalStyles.statLabel}>{t("friends")}</Text>
+                      <Text style={modalStyles.statValue}>{publicProfile.friends_count ?? 0}</Text>
+                    </View>
+                  ) : null}
+                  {publicProfile.is_private_account && !publicProfile.can_view_private_profile ? (
+                    <Text style={modalStyles.profileInfoText}>{t("privateAccountNotice")}. {t("onlyPublicCommunityInfo")}</Text>
+                  ) : (
+                    <View style={modalStyles.profileInfoCard}>
+                      <Text style={modalStyles.profileInfoText}>{publicProfile.bio || "-"}</Text>
+                      <Text style={modalStyles.profileInfoMeta}>{t("country")}: {publicProfile.country || "—"}</Text>
+                      <Text style={modalStyles.profileInfoMeta}>Member since: {new Date(publicProfile.member_since).toLocaleDateString()}</Text>
+                      {"birth_date" in publicProfile && publicProfile.birth_date ? (
+                        <Text style={modalStyles.profileInfoMeta}>Birth date: {new Date(publicProfile.birth_date).toLocaleDateString()}</Text>
+                      ) : null}
+                    </View>
+                  )}
+                  {!publicProfile.is_own_profile ? (
+                    <View style={modalStyles.profileActionsRow}>
+                      <Pressable
+                        disabled={publicProfile.friend_request_status !== "none"}
+                        style={[modalStyles.profileActionBtn, modalStyles.friendBtn, publicProfile.friend_request_status !== "none" && { opacity: 0.6 }]}
+                        onPress={async () => {
+                          try {
+                            await sendFriendRequest(publicProfile.id);
+                            const p = await getPublicProfile(publicProfile.id);
+                            setPublicProfile(p);
+                          } catch (e: any) {
+                            Alert.alert(t("error"), e?.message ?? t("couldNotSave"));
+                          }
+                        }}
+                      >
+                        <Text style={modalStyles.postText}>{publicProfile.friend_request_status === "accepted" ? t("friends") : publicProfile.friend_request_status === "pending_sent" ? t("requestSent") : t("addFriend")}</Text>
+                      </Pressable>
+                      {publicProfile.can_message ? (
+                        <Pressable
+                          style={[modalStyles.profileActionBtn, modalStyles.messageBtn]}
+                          onPress={async () => {
+                            try {
+                              const conv = await createOrGetConversation(publicProfile.id);
+                              setPublicProfile(null);
+                              navigation.navigate("Home", { screen: "DirectChat", params: { conversationId: conv.id, title: publicProfile.username } });
+                            } catch (e: any) {
+                              Alert.alert(t("error"), e?.message ?? t("cannotMessageUser"));
+                            }
+                          }}
+                        >
+                          <Text style={modalStyles.postText}>{t("message")}</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </View>
+              </ScrollView>
+            )}
           </SafeAreaView>
         </Modal>
       ) : null}

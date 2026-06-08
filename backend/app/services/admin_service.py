@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
@@ -95,15 +96,12 @@ class AdminService:
                 .all()
             )
         ]
+        emotion_counts = Counter(
+            analysis.emotion_label for analysis in self.db.query(JournalAnalysis).all()
+        )
         most_common_emotions = [
             {"emotion": emotion, "count": count}
-            for emotion, count in (
-                self.db.query(JournalAnalysis.emotion_label, func.count(JournalAnalysis.id).label("count"))
-                .group_by(JournalAnalysis.emotion_label)
-                .order_by(desc("count"))
-                .limit(10)
-                .all()
-            )
+            for emotion, count in emotion_counts.most_common(10)
         ]
 
         return {
@@ -168,8 +166,6 @@ class AdminService:
 
     def list_risk_items(self, limit: int = 50) -> list[dict]:
         items: list[dict] = []
-        items.extend(self._risk_items_for_model(JournalEntry, "journal_entry", JournalEntry.content, limit))
-        items.extend(self._risk_items_for_model(ChatMessage, "chat_message", ChatMessage.content, limit))
         items.extend(self._risk_items_for_model(CommunityPost, "community_post", CommunityPost.content, limit))
         items.extend(self._risk_items_for_model(CommunityComment, "community_comment", CommunityComment.content, limit))
         return sorted(items, key=lambda item: item["created_at"], reverse=True)[:limit]

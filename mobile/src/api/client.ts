@@ -35,9 +35,9 @@ function formatDetail(detail: unknown): string {
 
 export async function apiFetch<T>(
   path: string,
-  options: RequestInit & { auth?: boolean } = {}
+  options: RequestInit & { auth?: boolean; timeoutMs?: number } = {}
 ): Promise<T> {
-  const { auth = false, headers, ...rest } = options;
+  const { auth = false, timeoutMs = 30000, headers, signal, ...rest } = options;
   const url = `${API_BASE_URL}${API_PREFIX}${path}`;
   const h = new Headers(headers);
   h.set('Accept', 'application/json');
@@ -52,15 +52,25 @@ export async function apiFetch<T>(
     }
   }
   let res: Response;
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+  const abortFromCaller = () => controller.abort();
+  signal?.addEventListener("abort", abortFromCaller);
   try {
-    res = await fetch(url, { ...rest, headers: h });
+    res = await fetch(url, { ...rest, headers: h, signal: controller.signal });
   } catch (error) {
+    const timedOut = controller.signal.aborted && !signal?.aborted;
     const reason =
-      error instanceof Error ? error.message : 'Network request failed';
+      timedOut
+        ? `Request timed out after ${Math.round(timeoutMs / 1000)} seconds`
+        : error instanceof Error ? error.message : 'Network request failed';
     throw new ApiError(
       `Cannot reach backend (${url}). ${reason}. Make sure backend is running and reachable from your phone.`,
       0
     );
+  } finally {
+    clearTimeout(timeoutHandle);
+    signal?.removeEventListener("abort", abortFromCaller);
   }
   const text = await res.text();
   if (!res.ok) {
