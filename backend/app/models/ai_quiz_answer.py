@@ -2,6 +2,7 @@ from sqlalchemy import ForeignKey, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+from app.core.encryption import EncryptedText
 
 
 class AIQuizAnswer(TimestampMixin, Base):
@@ -15,7 +16,7 @@ class AIQuizAnswer(TimestampMixin, Base):
     )
     question_index: Mapped[int] = mapped_column(Integer, nullable=False)
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
-    answer_text: Mapped[str] = mapped_column(Text, nullable=False)
+    answer_text: Mapped[str] = mapped_column(EncryptedText(), nullable=False)
     score: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     session = relationship("AIQuizSession", back_populates="answers")

@@ -16,8 +16,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "SelfMind Pro API"
     API_V1_STR: str = "/api/v1"
 
-    # Cloud providers usually expose one connection string (DATABASE_URL).
-    # Local development can still use separate POSTGRES_* variables.
+
     DATABASE_URL: str | None = None
     DB_SSL_MODE: str | None = None
     REDIS_URL: str | None = None
@@ -29,12 +28,17 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "selfmind_db"
 
     SECRET_KEY: str
+    DATA_ENCRYPTION_KEY: str | None = None
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30
 
     OPENAI_API_KEY: str
     OPENAI_MODEL: str = "gpt-5-mini"
     BACKEND_CORS_ORIGINS: List[str] = ["*"]
+
+    FIREBASE_PROJECT_ID: str | None = None
+    FIREBASE_CREDENTIALS_PATH: str | None = None
+    FIREBASE_CREDENTIALS_JSON: str | None = None
 
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:

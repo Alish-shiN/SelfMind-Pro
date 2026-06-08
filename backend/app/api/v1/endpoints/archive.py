@@ -1,7 +1,6 @@
 from datetime import date, datetime, time
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import String, cast, or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -106,20 +105,6 @@ def _search_archive_uncached(
     if tab == "favorites" or favorites_only:
         query = query.filter(JournalEntry.id.in_(favorite_id_set))
 
-    if q and q.strip():
-        pattern = f"%{q.strip()}%"
-        query = query.filter(
-            or_(
-                JournalEntry.title.ilike(pattern),
-                JournalEntry.content.ilike(pattern),
-                cast(JournalEntry.tags, String).ilike(pattern),
-                JournalAnalysis.short_summary.ilike(pattern),
-                JournalAnalysis.recommendation.ilike(pattern),
-                JournalAnalysis.emotion_label.ilike(pattern),
-                JournalAnalysis.sentiment_label.ilike(pattern),
-            )
-        )
-
     if start_date:
         query = query.filter(
             JournalEntry.created_at >= datetime.combine(start_date, time.min)
@@ -133,24 +118,56 @@ def _search_archive_uncached(
         mood_value = mood_or_emotion.strip()
         if mood_value.isdigit():
             query = query.filter(JournalEntry.mood_score == int(mood_value))
-        else:
-            pattern = f"%{mood_value}%"
-            query = query.filter(
-                or_(
-                    JournalAnalysis.emotion_label.ilike(pattern),
-                    JournalAnalysis.sentiment_label.ilike(pattern),
-                )
-            )
-
-    for tag in [item.strip() for item in tags if item.strip()]:
-        query = query.filter(cast(JournalEntry.tags, String).ilike(f"%{tag}%"))
 
     order_by = (
         JournalEntry.created_at.asc()
         if sort == "oldest"
         else JournalEntry.created_at.desc()
     )
-    rows = query.order_by(order_by).limit(limit).all()
+    rows = query.order_by(order_by).all()
+
+    text_query = q.strip().casefold() if q and q.strip() else None
+    emotion_query = (
+        mood_or_emotion.strip().casefold()
+        if mood_or_emotion and mood_or_emotion.strip() and not mood_or_emotion.strip().isdigit()
+        else None
+    )
+    if text_query:
+        rows = [
+            (entry, analysis)
+            for entry, analysis in rows
+            if text_query
+            in " ".join(
+                [
+                    entry.title,
+                    entry.content,
+                    " ".join(entry.tags or []),
+                    analysis.short_summary if analysis else "",
+                    analysis.recommendation if analysis else "",
+                    analysis.emotion_label if analysis else "",
+                    analysis.sentiment_label if analysis else "",
+                ]
+            ).casefold()
+        ]
+    if emotion_query:
+        rows = [
+            (entry, analysis)
+            for entry, analysis in rows
+            if analysis
+            and emotion_query
+            in f"{analysis.emotion_label} {analysis.sentiment_label}".casefold()
+        ]
+    normalized_tags = [item.strip().casefold() for item in tags if item.strip()]
+    if normalized_tags:
+        rows = [
+            (entry, analysis)
+            for entry, analysis in rows
+            if all(
+                requested_tag in {tag.casefold() for tag in entry.tags or []}
+                for requested_tag in normalized_tags
+            )
+        ]
+    rows = rows[:limit]
 
     return [
         {

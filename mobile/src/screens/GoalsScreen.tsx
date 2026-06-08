@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   Alert,
@@ -16,8 +15,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { ApiError } from "../api/client";
 import { getDashboardHome } from "../api/dashboard";
 import { getCurrentUser } from "../api/user";
+import { getMyNotifications } from "../api/user";
 import { getAiQuizHistory } from "../api/aiQuiz";
 import { getMyChatSessions } from "../api/chat";
+import { listDirectConversations } from "../api/dm";
 import {
   completeGoal,
   createGoal,
@@ -35,7 +36,6 @@ import { useTranslation } from "../i18n/I18nContext";
 import { OfflineNotice } from "../components/OfflineNotice";
 import {
   getNetworkOfflineState,
-  isOfflineLikeError,
   withOfflineTimeout,
 } from "../services/offlineNetworkService";
 import {
@@ -348,7 +348,6 @@ function AchievementCard({ achievement }: { achievement: Achievement }) {
 }
 
 export function GoalsScreen() {
-  const GOALS_CACHE_KEY = "goals_screen_cache_v1";
   const { t } = useTranslation();
   const [progress, setProgress] = useState<GoalProgress[]>([]);
   const [summary, setSummary] = useState<WeeklyGoalSummary | null>(null);
@@ -379,6 +378,8 @@ export function GoalsScreen() {
         weeklyMoodReview,
         weeklySummaryCompleted,
         goalPaused,
+        notifications,
+        directConversations,
       ] = await Promise.all([
         withOfflineTimeout(getGoalProgress()),
         withOfflineTimeout(getWeeklyGoalSummary()),
@@ -391,6 +392,8 @@ export function GoalsScreen() {
         getAchievementWeeklyMoodReview(),
         getAchievementWeeklySummaryCompleted(),
         getAchievementGoalPaused(),
+        getMyNotifications().catch(() => []),
+        listDirectConversations().catch(() => []),
       ]);
       if (s) {
         void setAchievementWeeklySummaryCompleted();
@@ -398,10 +401,6 @@ export function GoalsScreen() {
       setProgress(p);
       setSummary(s);
       setTemplates(templatesData);
-      await AsyncStorage.setItem(
-        GOALS_CACHE_KEY,
-        JSON.stringify({ progress: p, summary: s, templates: templatesData }),
-      );
       const reflectionProgress = p.find(
         (item) => item.goal.goal_type === "reflection",
       );
@@ -428,6 +427,8 @@ export function GoalsScreen() {
           ),
         )
         .reduce((total, item) => total + item.current_count, 0);
+      const acceptedFriendsCount = notifications.filter((item) => item.kind === "friend_request_accepted").length;
+      const uniqueMessagedUsersCount = new Set(directConversations.map((item) => item.other_user_id)).size;
       setAchievements(
         buildAchievements(
           {
@@ -453,25 +454,17 @@ export function GoalsScreen() {
             weeklySummaryViewed: weeklySummaryCompleted || Boolean(s),
             weeklySummaryCount: weeklySummaryCompleted || Boolean(s) ? 1 : 0,
             privacyConfigured: privacyReady,
+            acceptedFriendsCount,
+            uniqueMessagedUsersCount,
           },
           t,
         ),
       );
     } catch (e) {
-      const cachedRaw = await AsyncStorage.getItem(GOALS_CACHE_KEY);
-      if (cachedRaw) {
-        const cached = JSON.parse(cachedRaw);
-        setProgress(cached.progress ?? []);
-        setSummary(cached.summary ?? null);
-        setTemplates(cached.templates ?? []);
-        setOfflineNotice(t("offlineShowingSavedData"));
-      }
       const offlineState = await getNetworkOfflineState();
       setError(
-        cachedRaw
-          ? null
-          : offlineState || isOfflineLikeError(e)
-            ? t("offlineShowingSavedData")
+        offlineState
+            ? t("featureRequiresConnection")
             : e instanceof ApiError
               ? e.message
               : t("couldNotLoadGoals"),

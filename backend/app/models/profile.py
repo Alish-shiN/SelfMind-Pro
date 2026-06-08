@@ -1,8 +1,9 @@
 from datetime import date
-from sqlalchemy import Date, ForeignKey, String, Text
+from sqlalchemy import Date, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+from app.core.encryption import EncryptedText
 
 
 class Profile(TimestampMixin, Base):
@@ -10,8 +11,8 @@ class Profile(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
-    full_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    bio: Mapped[str | None] = mapped_column(Text, nullable=True)
+    full_name: Mapped[str | None] = mapped_column(EncryptedText(), nullable=True)
+    bio: Mapped[str | None] = mapped_column(EncryptedText(), nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
     country: Mapped[str | None] = mapped_column(String(100), nullable=True)

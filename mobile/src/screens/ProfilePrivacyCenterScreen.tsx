@@ -29,6 +29,8 @@ import type { RootStackParamList } from "../navigation/types";
 import { colors } from "../theme/colors";
 import { useTranslation } from "../i18n/I18nContext";
 import { useAuth } from "../context/AuthContext";
+import { OfflineNotice } from "../components/OfflineNotice";
+import { getNetworkOfflineState, withOfflineTimeout } from "../services/offlineNetworkService";
 
 type Props = NativeStackScreenProps<RootStackParamList, "ProfilePrivacyCenter">;
 
@@ -40,17 +42,21 @@ export function ProfilePrivacyCenterScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const data = await getPrivacyCenter();
+        const data = await withOfflineTimeout(getPrivacyCenter());
+        setOfflineNotice(null);
         if (!cancelled) {
           setCenter(data);
           setDraft(data.preferences);
         }
       } catch (e) {
+        const isOffline = await getNetworkOfflineState();
+        if (isOffline) setOfflineNotice(t("offlineShowingSavedData"));
         if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
           await signOut("sessionExpired");
           return;
@@ -73,6 +79,10 @@ export function ProfilePrivacyCenterScreen({ navigation }: Props) {
 
   const save = async () => {
     if (!draft) return;
+    if (await getNetworkOfflineState()) {
+      Alert.alert(t("onlineRequired"), t("featureRequiresConnection"));
+      return;
+    }
     setSaving(true);
     try {
       const updated = await updateUserPreferences({ privacy_preferences: draft.privacy_preferences });
@@ -91,6 +101,10 @@ export function ProfilePrivacyCenterScreen({ navigation }: Props) {
   };
 
   const exportData = async (exportType: PersonalExportType, labelKey: string) => {
+    if (await getNetworkOfflineState()) {
+      Alert.alert(t("onlineRequired"), t("featureRequiresConnection"));
+      return;
+    }
     setSaving(true);
     setExportStatus(t("preparingExport"));
     try {
@@ -116,6 +130,10 @@ export function ProfilePrivacyCenterScreen({ navigation }: Props) {
   };
 
   const downloadPdfReport = async () => {
+    if (await getNetworkOfflineState()) {
+      Alert.alert(t("onlineRequired"), t("featureRequiresConnection"));
+      return;
+    }
     setSaving(true);
     setExportStatus(t("generatingPdf"));
     try {
@@ -142,6 +160,10 @@ export function ProfilePrivacyCenterScreen({ navigation }: Props) {
         text: t("deleteAllData"),
         style: "destructive",
         onPress: async () => {
+          if (await getNetworkOfflineState()) {
+            Alert.alert(t("onlineRequired"), t("featureRequiresConnection"));
+            return;
+          }
           setSaving(true);
           try {
             await deleteUserAccount();
@@ -174,6 +196,7 @@ export function ProfilePrivacyCenterScreen({ navigation }: Props) {
         </View>
       ) : draft ? (
         <ScrollView contentContainerStyle={styles.body}>
+          {offlineNotice ? <OfflineNotice message={offlineNotice} /> : null}
           <View style={styles.card}>
             <Ionicons name="shield-checkmark-outline" size={24} color={colors.coral} />
             <Text style={styles.cardTitle}>{t("privacyTitle")}</Text>
@@ -183,10 +206,16 @@ export function ProfilePrivacyCenterScreen({ navigation }: Props) {
 
           <Text style={styles.sectionLabel}>{t("privacyDefaults")}</Text>
           <ToggleRow
-            label="Private account"
+            label={t("privateAccount")}
             description="Hide avatar and display name on public profile. Limited info only: country, bio, member since."
             value={draft.privacy_preferences.private_account}
             onPress={() => setPrivacy({ private_account: !draft.privacy_preferences.private_account })}
+          />
+          <ToggleRow
+            label={t("onlyFriendsCanMessage")}
+            description={t("onlyFriendsCanMessageDesc")}
+            value={draft.privacy_preferences.only_friends_can_message}
+            onPress={() => setPrivacy({ only_friends_can_message: !draft.privacy_preferences.only_friends_can_message })}
           />
           <ToggleRow
             label={t("privateDiaryDefault")}

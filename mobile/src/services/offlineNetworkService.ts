@@ -1,7 +1,8 @@
 import { ApiError } from "../api/client";
 
-export const SHORT_API_TIMEOUT_MS = 2500;
-export const CREATE_API_TIMEOUT_MS = 15000;
+export const SHORT_API_TIMEOUT_MS = 8000;
+export const STARTUP_API_TIMEOUT_MS = 5500;
+export const CREATE_API_TIMEOUT_MS = 30000;
 
 export type OfflineTimeoutError = Error & { code: "OFFLINE_TIMEOUT" };
 

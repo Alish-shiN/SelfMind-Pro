@@ -1,7 +1,8 @@
-from sqlalchemy import Float, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Float, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+from app.core.encryption import EncryptedText
 
 
 class JournalAnalysis(TimestampMixin, Base):
@@ -17,10 +18,10 @@ class JournalAnalysis(TimestampMixin, Base):
         index=True,
     )
 
-    sentiment_label: Mapped[str] = mapped_column(String(50), nullable=False)
-    emotion_label: Mapped[str] = mapped_column(String(50), nullable=False)
+    sentiment_label: Mapped[str] = mapped_column(EncryptedText(), nullable=False)
+    emotion_label: Mapped[str] = mapped_column(EncryptedText(), nullable=False)
     confidence_score: Mapped[float] = mapped_column(Float, nullable=False)
-    short_summary: Mapped[str] = mapped_column(Text, nullable=False)
-    recommendation: Mapped[str] = mapped_column(Text, nullable=False)
+    short_summary: Mapped[str] = mapped_column(EncryptedText(), nullable=False)
+    recommendation: Mapped[str] = mapped_column(EncryptedText(), nullable=False)
 
     journal_entry = relationship("JournalEntry", back_populates="analysis")

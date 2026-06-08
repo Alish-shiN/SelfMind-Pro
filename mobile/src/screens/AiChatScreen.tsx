@@ -19,6 +19,8 @@ import { useAuth } from "../context/AuthContext";
 import type { HomeStackParamList } from "../navigation/types";
 import { ApiError } from "../api/client";
 import { getChatSessionDetail, sendChatMessage } from "../api/chat";
+import { OfflineNotice } from "../components/OfflineNotice";
+import { getNetworkOfflineState, isOfflineLikeError, withOfflineTimeout } from "../services/offlineNetworkService";
 
 type Props = NativeStackScreenProps<HomeStackParamList, "AiChat">;
 type ChatMessage = { id: number; role: "user" | "assistant"; text: string };
@@ -36,17 +38,20 @@ export function AiChatScreen({ navigation, route }: Props) {
   const mountedRef = useRef(false);
   const scrollRef = useRef<ScrollView | null>(null);
   const sessionId = route.params.sessionId;
+  const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
 
   const canSend = useMemo(() => text.trim().length > 0 && !loading && !awaitingAssistant, [awaitingAssistant, loading, text]);
 
   const bootstrap = useCallback(async () => {
     try {
       setError(null);
+      setOfflineNotice(null);
       setLoading(true);
-      const detail = await getChatSessionDetail(sessionId);
+      const detail = await withOfflineTimeout(getChatSessionDetail(sessionId));
       setCurrentTitle(detail.session.title || route.params.title || t("aiChat"));
       if (!mountedRef.current) return;
-      setMessages(detail.messages.map((m) => ({ id: m.id, role: m.role === "assistant" ? "assistant" : "user", text: m.content })));
+      const mapped = detail.messages.map((m) => ({ id: m.id, role: m.role === "assistant" ? "assistant" : "user", text: m.content })) as ChatMessage[];
+      setMessages(mapped);
     } catch (e) {
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
         await signOut("sessionExpired");
@@ -73,6 +78,11 @@ export function AiChatScreen({ navigation, route }: Props) {
 
   const send = useCallback(async () => {
     if (!canSend) return;
+    const isOffline = await getNetworkOfflineState();
+    if (isOffline) {
+      setError(t("featureRequiresConnection"));
+      return;
+    }
     const content = text.trim();
     const tempId = -Date.now();
     setText("");
@@ -94,7 +104,13 @@ export function AiChatScreen({ navigation, route }: Props) {
         await signOut("sessionExpired");
         return;
       }
-      setError(e instanceof ApiError ? e.message : t("couldNotSendMessage"));
+      setError(
+        isOfflineLikeError(e)
+          ? t("featureRequiresConnection")
+          : e instanceof ApiError
+            ? e.message
+            : t("couldNotSendMessage"),
+      );
     } finally {
       setAwaitingAssistant(false);
     }
@@ -110,6 +126,7 @@ export function AiChatScreen({ navigation, route }: Props) {
         </View>
 
         <View style={styles.disclaimerBox}><Text style={styles.disclaimerText}>AI can make mistakes. It is not a therapist or medical professional.</Text></View>
+        {offlineNotice ? <OfflineNotice message={offlineNotice} /> : null}
 
         <ScrollView ref={scrollRef} style={styles.list} contentContainerStyle={styles.listContent} keyboardShouldPersistTaps="handled">
           {error ? <View style={styles.errBox}><Text style={styles.errText}>{error}</Text><Pressable style={styles.retryBtn} onPress={bootstrap}><Text style={styles.retryText}>{t("retry")}</Text></Pressable></View> : null}

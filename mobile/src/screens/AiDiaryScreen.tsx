@@ -296,61 +296,7 @@ function TimePickerModal({
   );
 }
 
-async function getNetworkOfflineState(): Promise<boolean | null> {
-  try {
-    const netInfo = require("@react-native-community/netinfo");
-    const state = await netInfo.fetch();
 
-    if (__DEV__) {
-      console.log("[offline-journal] netinfo state", {
-        isConnected: state?.isConnected,
-        isInternetReachable: state?.isInternetReachable,
-      });
-    }
-
-    if (state?.isConnected === false) return true;
-    if (state?.isInternetReachable === false) return true;
-    return false;
-  } catch {
-    return null;
-  }
-}
-
-const OFFLINE_API_TIMEOUT_MS = 2500;
-const CREATE_ENTRY_TIMEOUT_MS = 15000;
-
-function createOfflineTimeoutError() {
-  const error: any = new Error("Network request timeout");
-  error.status = 0;
-  return error;
-}
-
-function isOfflineLikeError(error: any) {
-  return (
-    error?.status === 0 ||
-    error?.name === "AbortError" ||
-    error?.message?.toLowerCase?.().includes("network request failed") ||
-    error?.message?.toLowerCase?.().includes("network request timeout") ||
-    error?.message?.toLowerCase?.().includes("failed to fetch")
-  );
-}
-
-function withOfflineTimeout<T>(
-  promise: Promise<T>,
-  ms = OFFLINE_API_TIMEOUT_MS,
-): Promise<T> {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-  const timeoutPromise = new Promise<T>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(createOfflineTimeoutError());
-    }, ms);
-  });
-
-  return Promise.race([promise, timeoutPromise]).finally(() => {
-    if (timeoutId) clearTimeout(timeoutId);
-  });
-}
 
 // ─── New Entry Modal ──────────────────────────────────────────────────────────
 function NewEntryModal({
@@ -390,6 +336,13 @@ function NewEntryModal({
   }, [defaultPrivate, visible]);
 
   const saveLocalAndNotify = async () => {
+    if (isPrivate) {
+      Alert.alert(
+        t("privacy"),
+        "Private entries are not stored in unencrypted offline storage. Connect to the internet to save this entry securely.",
+      );
+      return;
+    }
     const now = new Date().toISOString();
     await saveOfflineJournalEntry({
       title: title.trim(),
@@ -473,15 +426,11 @@ function NewEntryModal({
       } else {
         Alert.alert(t("saved"), t("connectionSlowShowingSavedData"));
       }
-    } finally {
+        } finally {
       isCreatingRef.current = false;
       setLoading(false);
     }
-  } finally {
-    isCreatingRef.current = false;
-    setLoading(false);
-  }
-};
+  };
 
   return (
     <Modal
@@ -1142,7 +1091,7 @@ export function AIDiaryScreen({ route, navigation }: Props) {
         ...mappedOffline.filter((item) => !item.server_id),
         ...cachedEntries,
       ]);
-      setOfflineNotice("You're offline. Showing saved entries.");
+      if (await getNetworkOfflineState()) setOfflineNotice(t("offlineShowingSavedData")); else setOfflineNotice(null);
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
         await signOut("sessionExpired");
         return;
@@ -1172,12 +1121,6 @@ export function AIDiaryScreen({ route, navigation }: Props) {
     return () => clearInterval(intervalId);
   }, [load]);
 
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      load();
-    }, 20000);
-    return () => clearInterval(intervalId);
-  }, [load]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {

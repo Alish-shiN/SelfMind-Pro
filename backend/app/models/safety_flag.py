@@ -1,8 +1,9 @@
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+from app.core.encryption import EncryptedText
 
 
 class SafetyFlag(TimestampMixin, Base):
@@ -19,6 +20,6 @@ class SafetyFlag(TimestampMixin, Base):
     severity: Mapped[str] = mapped_column(String(30), nullable=False, default="medium", index=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="open", index=True)
     matched_signals: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False)
-    content_excerpt: Mapped[str] = mapped_column(Text, nullable=False)
+    content_excerpt: Mapped[str] = mapped_column(EncryptedText(), nullable=False)
 
     user = relationship("User")

@@ -29,7 +29,12 @@ async function readAll() {
   if (!raw) return [] as OfflineJournalEntry[];
   try {
     const parsed = JSON.parse(raw) as OfflineJournalEntry[];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    const nonPrivateEntries = parsed.filter((entry) => !entry.is_private);
+    if (nonPrivateEntries.length !== parsed.length) {
+      await AsyncStorage.setItem(OFFLINE_JOURNAL_KEY, JSON.stringify(nonPrivateEntries));
+    }
+    return nonPrivateEntries;
   } catch {
     return [];
   }
@@ -45,6 +50,9 @@ export async function saveOfflineJournalEntry(
     "local_id" | "server_id" | "sync_status" | "sync_in_progress" | "sync_started_at"
   >,
 ) {
+  if (payload.is_private) {
+    throw new Error("Private journal entries cannot be stored in unencrypted offline storage.");
+  }
   const current = await readAll();
   const nowMs = Date.now();
   const titleNorm = payload.title.trim().toLowerCase();
@@ -212,7 +220,8 @@ export type CachedServerJournalEntry = {
 export async function saveCachedServerJournalEntries(
   entries: CachedServerJournalEntry[],
 ) {
-  await AsyncStorage.setItem(CACHED_SERVER_JOURNAL_KEY, JSON.stringify(entries));
+  const nonPrivateEntries = entries.filter((entry) => !entry.is_private);
+  await AsyncStorage.setItem(CACHED_SERVER_JOURNAL_KEY, JSON.stringify(nonPrivateEntries));
 }
 
 export async function getCachedServerJournalEntries() {
@@ -220,7 +229,12 @@ export async function getCachedServerJournalEntries() {
   if (!raw) return [] as CachedServerJournalEntry[];
   try {
     const parsed = JSON.parse(raw) as CachedServerJournalEntry[];
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    const nonPrivateEntries = parsed.filter((entry) => !entry.is_private);
+    if (nonPrivateEntries.length !== parsed.length) {
+      await AsyncStorage.setItem(CACHED_SERVER_JOURNAL_KEY, JSON.stringify(nonPrivateEntries));
+    }
+    return nonPrivateEntries;
   } catch {
     return [];
   }

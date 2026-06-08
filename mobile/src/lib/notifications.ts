@@ -20,6 +20,7 @@ type NotificationModule = {
 const REMINDER_IDS_KEY = 'selfmind:scheduled-reminder-ids';
 const ENTRY_IDS_KEY = 'selfmind:scheduled-entry-reminder-ids';
 const REMINDER_CHANNEL_ID = 'selfmind-reminders';
+let responseListener: { remove?: () => void } | null = null;
 
 const REMINDER_COPY: Record<ReminderType, { title: string; body: string; timeField: keyof ReminderPreference; enabledField: keyof ReminderPreference }> = {
   journal: {
@@ -153,6 +154,22 @@ export async function scheduleReminderPreferences(preferences: ReminderPreferenc
 
   await writeIds(REMINDER_IDS_KEY, ids);
   return { scheduled: ids.length };
+}
+
+export async function ensureNotificationAccess() {
+  const notifications = getNotifications();
+  return ensurePermissions(notifications);
+}
+
+export function subscribeNotificationNavigation(onOpen: (data: Record<string, unknown>) => void) {
+  const notifications = getNotifications() as any;
+  if (responseListener?.remove) responseListener.remove();
+  if (!notifications.addNotificationResponseReceivedListener) return () => undefined;
+  responseListener = notifications.addNotificationResponseReceivedListener((response: any) => {
+    const data = response?.notification?.request?.content?.data ?? {};
+    onOpen(data);
+  });
+  return () => responseListener?.remove?.();
 }
 
 export async function scheduleJournalEntryReminder({

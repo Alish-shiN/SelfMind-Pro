@@ -24,6 +24,9 @@ class User(TimestampMixin, Base):
         String(50), unique=True, index=True, nullable=False
     )
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    firebase_uid: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True, index=True)
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     role: Mapped[str] = mapped_column(
         String(30), default=ROLE_USER, nullable=False, index=True
     )

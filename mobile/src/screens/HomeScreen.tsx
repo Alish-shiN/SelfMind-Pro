@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -6,17 +7,15 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { DecorBlobs } from "../components/DecorBlobs";
 import { colors } from "../theme/colors";
 import { getDashboardHome } from "../api/dashboard";
-import { getAccountInfo, resolveMediaUrl } from "../api/user";
+import { getAccountInfo, getMyNotifications, resolveMediaUrl } from "../api/user";
 import { ApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { formatMoodLine, moodEmoji } from "../utils/mood";
 import { useTranslation } from "../i18n/I18nContext";
 import { shouldShowImmediateHelp } from "../lib/safetySupport";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { OfflineNotice } from "../components/OfflineNotice";
 import {
   getNetworkOfflineState,
-  isOfflineLikeError,
   withOfflineTimeout,
 } from "../services/offlineNetworkService";
 import type { HomeStackParamList } from "../navigation/types";
@@ -24,7 +23,6 @@ import type { HomeStackParamList } from "../navigation/types";
 type Props = NativeStackScreenProps<HomeStackParamList, "HomeMain">;
 
 export function HomeScreen({ navigation }: Props) {
-  const HOME_CACHE_KEY = "home_dashboard_cache_v1";
   const { t } = useTranslation();
   const { signOut } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -36,6 +34,7 @@ export function HomeScreen({ navigation }: Props) {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
   const [offlineNotice, setOfflineNotice] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const load = useCallback(async () => {
     setError(null);
@@ -43,24 +42,22 @@ export function HomeScreen({ navigation }: Props) {
       setOfflineNotice(null);
       const d = await withOfflineTimeout(getDashboardHome());
       setData(d);
-      await AsyncStorage.setItem(HOME_CACHE_KEY, JSON.stringify(d));
       const account = await getAccountInfo().catch(() => null);
       setAvatarUrl(resolveMediaUrl(account?.avatar_url));
       setAvatarFailed(false);
+      const notifications = await getMyNotifications().catch(() => []);
+      setUnreadCount(
+        notifications.filter((item) => item.status === "unread").length,
+      );
     } catch (e) {
-      const cachedRaw = await AsyncStorage.getItem(HOME_CACHE_KEY);
-      if (cachedRaw) {
-        setData(JSON.parse(cachedRaw));
-        setOfflineNotice(t("offlineShowingSavedData"));
-      }
       if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
         await signOut("sessionExpired");
         setError(null);
         return;
       }
       const offlineState = await getNetworkOfflineState();
-      const msg = offlineState || isOfflineLikeError(e)
-        ? t("offlineShowingSavedData")
+      const msg = offlineState
+        ? t("featureRequiresConnection")
         : e instanceof ApiError ? e.message : t("couldNotLoadDashboard");
       setError(msg);
     } finally {
@@ -72,6 +69,11 @@ export function HomeScreen({ navigation }: Props) {
   useEffect(() => {
     load();
   }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -136,6 +138,13 @@ export function HomeScreen({ navigation }: Props) {
               </Text>
               <Pressable style={styles.avatarCircle} onPress={() => navigation.navigate("Notifications")}>
                 <Ionicons name="notifications-outline" size={20} color={colors.text} />
+                {unreadCount > 0 ? (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </Text>
+                  </View>
+                ) : null}
               </Pressable>
             </View>
 
@@ -241,7 +250,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   greetingRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 8, marginBottom: 16 },
-  avatarCircle: { width: 42, height: 42, borderRadius: 21, backgroundColor: "#F5F7FA", borderWidth: 1, borderColor: colors.coral, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  avatarCircle: { width: 42, height: 42, borderRadius: 21, backgroundColor: "#F5F7FA", borderWidth: 1, borderColor: colors.coral, alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative" },
+  badge: { position: "absolute", right: -2, top: -2, backgroundColor: "#DC2626", borderRadius: 9, minWidth: 18, height: 18, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 },
+  badgeText: { color: "#fff", fontSize: 10, fontWeight: "800" },
   greetingBold: {
     fontWeight: "700",
   },
