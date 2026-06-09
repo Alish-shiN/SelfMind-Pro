@@ -35,3 +35,7 @@ backend/uploads/*
 uploads/
 mobile/uploads/
 backend/backend/
+
+backend/firebase-secrets/
+backend/firebase-secrets/*
+backend/firebase-service-account*.json

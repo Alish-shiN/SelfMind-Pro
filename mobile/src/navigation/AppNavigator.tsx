@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, View } from 'react-native';
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { getOnboardingComplete } from '../lib/storage';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
 import { WelcomeScreen } from '../screens/WelcomeScreen';
 import { RegisterScreen } from '../screens/RegisterScreen';
+import { ForgotPasswordScreen } from '../screens/ForgotPasswordScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { FeaturePlaceholderScreen } from '../screens/FeaturePlaceholderScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
@@ -32,6 +33,8 @@ import { NotificationsScreen } from '../screens/NotificationsScreen';
 import { DirectChatScreen } from '../screens/DirectChatScreen';
 import { getCurrentUser, getUserPreferences, UserPreferences } from '../api/user';
 import { colors } from '../theme/colors';
+import { ensureNotificationAccess, subscribeNotificationNavigation } from '../lib/notifications';
+import { STARTUP_API_TIMEOUT_MS, withOfflineTimeout } from '../services/offlineNetworkService';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
@@ -44,6 +47,7 @@ const navTheme = {
     background: colors.backgroundSoft,
   },
 };
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 function HomeStackNavigator() {
   return (
@@ -158,6 +162,18 @@ export function AppNavigator() {
   const [preferencesReady, setPreferencesReady] = useState(false);
 
   useEffect(() => {
+    void ensureNotificationAccess();
+    const unsubscribe = subscribeNotificationNavigation((data) => {
+      if (!navigationRef.isReady()) return;
+      const target = String(data.target ?? "");
+      if (target === "ai_diary") navigationRef.navigate("MainTabs");
+      if (target === "ai_quiz") navigationRef.navigate("MainTabs");
+      if (target === "direct_chat") navigationRef.navigate("MainTabs");
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       const done = await getOnboardingComplete();
@@ -180,7 +196,10 @@ export function AppNavigator() {
 
     (async () => {
       try {
-        const prefs = await getUserPreferences();
+        const prefs = await withOfflineTimeout(
+          getUserPreferences(),
+          STARTUP_API_TIMEOUT_MS,
+        );
         if (!cancelled) setPreferences(prefs);
       } catch {
         // Safe fallback: never trap users in personalization onboarding if preferences are unavailable.
@@ -198,6 +217,7 @@ export function AppNavigator() {
             privacy_notice_version: null,
             privacy_notice_accepted_at: null,
             private_account: true,
+            only_friends_can_message: true,
           },
           ai_tone: 'calm',
           onboarding_completed: true,
@@ -226,7 +246,7 @@ export function AppNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer theme={navTheme} ref={navigationRef}>
       <RootStack.Navigator id="RootStack" screenOptions={{ headerShown: false }}>
         {token && preferences && !preferences.onboarding_completed ? (
           <RootStack.Screen name="PersonalizationOnboarding">
@@ -258,6 +278,7 @@ export function AppNavigator() {
           <>
             <RootStack.Screen name="Welcome" component={WelcomeScreen} />
             <RootStack.Screen name="Register" component={RegisterScreen} />
+            <RootStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
           </>
         )}
       </RootStack.Navigator>

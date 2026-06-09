@@ -40,4 +40,4 @@ class CrisisResource(BaseModel):
     description: str
     action_label: str
     action_value: str
-    country: str = "US"
+    country: str = "GLOBAL"

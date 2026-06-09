@@ -10,6 +10,7 @@ from app.core.database import get_db
 from app.models.direct_conversation import DirectConversation
 from app.models.direct_message import DirectMessage
 from app.models.user import User
+from app.models.friend_request import FriendRequest
 
 router = APIRouter(prefix="/dm", tags=["dm"])
 
@@ -41,6 +42,19 @@ def create_or_get_conversation(target_user_id: int, db: Session = Depends(get_db
     target = db.query(User).filter(User.id == target_user_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
+    privacy = target.privacy_preferences or {}
+    only_friends = bool(privacy.get("only_friends_can_message", False))
+    if only_friends:
+        a, b = sorted([current_user.id, target_user_id])
+        is_friend = db.query(FriendRequest).filter(
+            FriendRequest.status == "accepted",
+            or_(
+                and_(FriendRequest.from_user_id == a, FriendRequest.to_user_id == b),
+                and_(FriendRequest.from_user_id == b, FriendRequest.to_user_id == a),
+            ),
+        ).first()
+        if not is_friend:
+            raise HTTPException(status_code=403, detail="You cannot message this user")
     a, b = sorted([current_user.id, target_user_id])
     conv = db.query(DirectConversation).filter(and_(DirectConversation.user_a_id == a, DirectConversation.user_b_id == b)).first()
     if not conv:

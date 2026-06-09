@@ -31,6 +31,7 @@ class PrivacyPreferences(BaseModel):
     privacy_notice_version: str | None = None
     privacy_notice_accepted_at: str | None = None
     private_account: bool = True
+    only_friends_can_message: bool = True
 
 
 class UserPreferencesResponse(BaseModel):

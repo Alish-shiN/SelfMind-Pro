@@ -36,6 +36,8 @@ export type BuildAchievementsInput = {
   weeklySummaryCount?: number;
   weeklyMoodReviewViewed?: boolean;
   privacyConfigured?: boolean;
+  acceptedFriendsCount?: number;
+  uniqueMessagedUsersCount?: number;
 };
 
 type AchievementConfig = Omit<
@@ -147,10 +149,52 @@ export function buildAchievements(
     input.activeGoalCreatedDates ?? [],
     14,
   );
+  const acceptedFriendsCount = input.acceptedFriendsCount ?? 0;
+  const uniqueMessagedUsersCount = input.uniqueMessagedUsersCount ?? 0;
 
   // TODO: Replace locally stored event flags with backend-backed user events when
   // achievement telemetry is available across devices.
   const configs: AchievementConfig[] = [
+    {
+      id: "made-one-friend",
+      titleKey: "achievementMadeOneFriend",
+      descriptionKey: "achievementMadeOneFriendDesc",
+      category: "easy",
+      icon: "people-outline",
+      target: 1,
+      progress: capped(acceptedFriendsCount, 1),
+      unlocked: acceptedFriendsCount >= 1,
+    },
+    {
+      id: "messaged-one-person",
+      titleKey: "achievementMessagedOnePerson",
+      descriptionKey: "achievementMessagedOnePersonDesc",
+      category: "easy",
+      icon: "chatbubble-outline",
+      target: 1,
+      progress: capped(uniqueMessagedUsersCount, 1),
+      unlocked: uniqueMessagedUsersCount >= 1,
+    },
+    {
+      id: "made-three-friends",
+      titleKey: "achievementMadeThreeFriends",
+      descriptionKey: "achievementMadeThreeFriendsDesc",
+      category: "medium",
+      icon: "people-circle-outline",
+      target: 3,
+      progress: capped(acceptedFriendsCount, 3),
+      unlocked: acceptedFriendsCount >= 3,
+    },
+    {
+      id: "messaged-five-people",
+      titleKey: "achievementMessagedFivePeople",
+      descriptionKey: "achievementMessagedFivePeopleDesc",
+      category: "medium",
+      icon: "mail-open-outline",
+      target: 5,
+      progress: capped(uniqueMessagedUsersCount, 5),
+      unlocked: uniqueMessagedUsersCount >= 5,
+    },
     {
       id: "first-reflection",
       titleKey: "achievementFirstReflection",
