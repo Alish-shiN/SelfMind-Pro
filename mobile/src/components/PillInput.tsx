@@ -5,9 +5,10 @@ import { colors } from '../theme/colors';
 type Props = {
   label: string;
   icon: ReactNode;
+  rightAccessory?: ReactNode;
 } & TextInputProps;
 
-export function PillInput({ label, icon, style, ...rest }: Props) {
+export function PillInput({ label, icon, rightAccessory, style, ...rest }: Props) {
   return (
     <View style={styles.wrap}>
       <Text style={styles.label}>{label}</Text>
@@ -21,6 +22,7 @@ export function PillInput({ label, icon, style, ...rest }: Props) {
           {...rest}
           style={[styles.input, style]}
         />
+        {rightAccessory ? <View style={styles.rightSlot}>{rightAccessory}</View> : null}
       </View>
     </View>
   );
@@ -55,5 +57,8 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.text,
     paddingVertical: 4,
+  },
+  rightSlot: {
+    marginLeft: 10,
   },
 });

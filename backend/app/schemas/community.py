@@ -18,6 +18,7 @@ ModerationStatus = Literal["visible", "hidden", "pending_review"]
 class CommunityAuthor(BaseModel):
     id: int | None = None
     username: str
+    avatar_url: str | None = None
 
 
 class CommunityReactionSummary(BaseModel):
@@ -100,7 +101,6 @@ class CommunityPostResponse(BaseModel):
     support_space: str
     topic_tags: list[str]
     image_url: str | None = None
-    image_url: str | None = None
     author: CommunityAuthor
     comments_count: int
     reactions: CommunityReactionSummary
@@ -116,6 +116,7 @@ class CommunityPostDetailResponse(BaseModel):
     is_anonymous: bool
     support_space: str
     topic_tags: list[str]
+    image_url: str | None = None
     author: CommunityAuthor
     comments_count: int
     reactions: CommunityReactionSummary

@@ -4,6 +4,7 @@ export type RootStackParamList = {
   Onboarding: undefined;
   Welcome: undefined;
   Register: undefined;
+  ForgotPassword: undefined;
   MainTabs: undefined;
   PersonalizationOnboarding: undefined;
   Profile: { openPersonalization?: boolean } | undefined;
@@ -35,4 +36,9 @@ export type WelcomeScreenProps = NativeStackScreenProps<
 export type RegisterScreenProps = NativeStackScreenProps<
   RootStackParamList,
   "Register"
+>;
+
+export type ForgotPasswordScreenProps = NativeStackScreenProps<
+  RootStackParamList,
+  "ForgotPassword"
 >;

@@ -20,6 +20,7 @@ export type PrivacyPreferences = {
   privacy_notice_version: string | null;
   privacy_notice_accepted_at: string | null;
   private_account: boolean;
+  only_friends_can_message: boolean;
 };
 
 export type UserPreferences = {
@@ -48,6 +49,7 @@ export const DEFAULT_USER_PREFERENCES: UserPreferences = {
     privacy_notice_version: null,
     privacy_notice_accepted_at: null,
     private_account: true,
+    only_friends_can_message: true,
   },
   ai_tone: 'calm',
   onboarding_completed: false,
@@ -174,8 +176,16 @@ export type PublicMiniProfile = {
   id: number;
   username: string;
   avatar_url: string | null;
+  is_own_profile: boolean;
+  is_friend: boolean;
+  friend_request_status: "none" | "pending_sent" | "pending_received" | "accepted";
+  can_message: boolean;
+  can_view_private_profile: boolean;
+  is_private_account: boolean;
+  only_friends_can_message: boolean;
   country: string | null;
   bio: string | null;
+  birth_date?: string | null;
   member_since: string;
   private_account: boolean;
   public_safe_preferences?: { community_profile_visibility?: string; anonymous_community_default?: boolean } | null;

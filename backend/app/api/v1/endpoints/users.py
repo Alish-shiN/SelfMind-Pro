@@ -57,6 +57,7 @@ DEFAULT_PRIVACY = {
     "privacy_notice_version": None,
     "privacy_notice_accepted_at": None,
     "private_account": True,
+    "only_friends_can_message": True,
 }
 EXPORT_OPTIONS = [
     {"type": "journal", "label": "Journal history", "formats": ["json"]},
@@ -117,10 +118,18 @@ class PublicMiniProfileResponse(BaseModel):
     id: int
     username: str
     avatar_url: str | None = None
+    is_own_profile: bool = False
+    is_friend: bool = False
+    friend_request_status: Literal["none", "pending_sent", "pending_received", "accepted"] = "none"
+    can_message: bool = False
+    can_view_private_profile: bool = False
+    is_private_account: bool = True
     country: str | None = None
     bio: str | None = None
+    birth_date: date | None = None
     member_since: datetime
     private_account: bool = True
+    only_friends_can_message: bool = True
     public_safe_preferences: dict[str, Any] | None = None
     public_safe_stats: dict[str, Any] | None = None
     friends_count: int = 0
@@ -209,15 +218,31 @@ def get_public_profile(user_id: int, db: Session = Depends(get_db), current_user
     profile = user.profile
     privacy = _serialize_privacy_preferences(user)
     friends_count = _friends_count(db, user.id)
-    if privacy.get("private_account", True):
+    is_own_profile = current_user.id == user.id
+    friendship = _friendship_status(db, current_user.id, user.id)
+    is_friend = friendship == "accepted"
+    is_private_account = bool(privacy.get("private_account", True))
+    can_view_private_profile = is_own_profile or is_friend or not is_private_account
+    only_friends_can_message = bool(privacy.get("only_friends_can_message", True))
+    can_message = (not is_own_profile) and (not only_friends_can_message or is_friend)
+
+    if is_private_account and not can_view_private_profile:
         return {
             "id": user.id,
-            "username": "Private member",
-            "avatar_url": None,
-            "country": profile.country if profile else None,
-            "bio": profile.bio if profile else None,
+            "username": user.username,
+            "avatar_url": profile.avatar_url if profile else None,
+            "country": None,
+            "bio": None,
+            "birth_date": None,
             "member_since": user.created_at,
             "private_account": True,
+            "is_private_account": True,
+            "is_own_profile": is_own_profile,
+            "is_friend": is_friend,
+            "friend_request_status": friendship,
+            "can_message": can_message,
+            "can_view_private_profile": False,
+            "only_friends_can_message": only_friends_can_message,
             "public_safe_preferences": None,
             "public_safe_stats": None,
             "friends_count": friends_count,
@@ -228,8 +253,16 @@ def get_public_profile(user_id: int, db: Session = Depends(get_db), current_user
         "avatar_url": profile.avatar_url if profile else None,
         "country": profile.country if profile else None,
         "bio": profile.bio if profile else None,
+        "birth_date": profile.date_of_birth if (profile and can_view_private_profile) else None,
         "member_since": user.created_at,
-        "private_account": False,
+        "private_account": is_private_account,
+        "is_private_account": is_private_account,
+        "is_own_profile": is_own_profile,
+        "is_friend": is_friend,
+        "friend_request_status": friendship,
+        "can_message": can_message,
+        "can_view_private_profile": can_view_private_profile,
+        "only_friends_can_message": only_friends_can_message,
         "public_safe_preferences": {
             "community_profile_visibility": privacy.get("community_profile_visibility", "members"),
             "anonymous_community_default": bool(privacy.get("anonymous_community_default", False)),
@@ -789,6 +822,7 @@ def _normalize_privacy_preferences(value: dict) -> dict:
     if visibility not in {"anonymous", "members", "public"}:
         privacy["community_profile_visibility"] = "members"
     privacy["private_account"] = bool(privacy.get("private_account", True))
+    privacy["only_friends_can_message"] = bool(privacy.get("only_friends_can_message", True))
     return privacy
 
 
@@ -801,6 +835,29 @@ def _normalize_goals(goals: list[str]) -> list[str]:
     return normalized[:8]
 
 
+
+
+def _friendship_status(db: Session, viewer_id: int, target_id: int) -> str:
+    if viewer_id == target_id:
+        return "accepted"
+    existing = (
+        db.query(FriendRequest)
+        .filter(
+            or_(
+                and_(FriendRequest.from_user_id == viewer_id, FriendRequest.to_user_id == target_id),
+                and_(FriendRequest.from_user_id == target_id, FriendRequest.to_user_id == viewer_id),
+            )
+        )
+        .order_by(FriendRequest.id.desc())
+        .first()
+    )
+    if not existing:
+        return "none"
+    if existing.status == "accepted":
+        return "accepted"
+    if existing.status == "pending":
+        return "pending_sent" if existing.from_user_id == viewer_id else "pending_received"
+    return "none"
 def _friends_count(db: Session, user_id: int) -> int:
     return (
         db.query(FriendRequest)

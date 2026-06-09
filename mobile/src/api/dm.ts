@@ -4,6 +4,7 @@ export type DirectConversation = {
   id: number;
   other_user_id: number;
   other_username: string;
+  last_message_preview?: string | null;
   created_at: string;
   updated_at: string;
 };

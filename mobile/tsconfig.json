@@ -4,7 +4,8 @@
     "allowJs": true,
     "target": "esnext",
     "module": "esnext",
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "customConditions": ["react-native"]
   },
   "include": [
     "**/*.ts",

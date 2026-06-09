@@ -32,3 +32,11 @@ export function register(payload: {
     body: JSON.stringify(payload),
   });
 }
+
+
+export function firebaseLogin(id_token: string, username?: string | null) {
+  return apiFetch<TokenResponse>('/auth/firebase-login', {
+    method: 'POST',
+    body: JSON.stringify({ id_token, username: username || undefined }),
+  });
+}

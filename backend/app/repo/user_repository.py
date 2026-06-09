@@ -10,6 +10,9 @@ class UserRepository:
     def get_by_email(self, email: str) -> User | None:
         return self.db.query(User).filter(User.email == email).first()
 
+    def get_by_firebase_uid(self, firebase_uid: str) -> User | None:
+        return self.db.query(User).filter(User.firebase_uid == firebase_uid).first()
+
     def get_by_username(self, username: str) -> User | None:
         return self.db.query(User).filter(User.username == username).first()
 
